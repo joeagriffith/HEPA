@@ -1,0 +1,6 @@
+,Encoder/train_loss,Encoder/val_loss,Encoder/1step_val_acc,Encoder/1step_val_loss,Encoder/train_loss,Encoder/val_loss,Encoder/1step_val_acc,Encoder/1step_val_loss,Encoder/train_loss,Encoder/val_loss,Encoder/1step_val_acc,Encoder/1step_val_loss,Encoder/train_loss,Encoder/val_loss,Encoder/1step_val_acc,Encoder/1step_val_loss
+,mean,mean,mean,mean,min,min,min,min,max,max,max,max,std,std,std,std
+step,,,,,,,,,,,,,,,,
+0,,,0.09716796875,,,,0.09716796875,,,,0.09716796875,,,,,
+1,,,0.09716796875,,,,0.09716796875,,,,0.09716796875,,,,,
+2,,,0.09716796875,,,,0.09716796875,,,,0.09716796875,,,,,
