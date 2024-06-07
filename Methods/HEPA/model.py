@@ -55,11 +55,11 @@ class HEPA(nn.Module):
 
         # NO BATCHNORM
         self.transition = nn.Sequential(
-            nn.Linear(self.num_features + 128, 1024, bias=False),
+            nn.Linear(self.num_features + 128, 1024),
             nn.ReLU(),
-            nn.Linear(1024, 512, bias=False),
+            nn.Linear(1024, 512),
             nn.ReLU(),
-            nn.Linear(512, self.num_features, bias=False)
+            nn.Linear(512, self.num_features)
         )
 
         #for Mnist (-1, 1, 28, 28)

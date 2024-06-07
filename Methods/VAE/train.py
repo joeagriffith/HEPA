@@ -7,10 +7,11 @@ from Utils.functional import smooth_l1_loss, cosine_schedule
 
 import os
 
-def vae_loss(x, x_hat, mu, logVar, beta=1.0):
-    reconstruction_loss = F.binary_cross_entropy_with_logits(x_hat, x, reduction='sum')
+def vae_loss(recon_x, x, mu, logVar, beta=1.0):
+    reconstruction_loss = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
+    mse = F.mse_loss(F.sigmoid(recon_x), x) * x.shape[0]
     kl_loss = -0.5 * torch.sum(1 + logVar - mu.pow(2) - logVar.exp())
-    return reconstruction_loss + beta * kl_loss
+    return reconstruction_loss + beta * kl_loss, mse
 
 def train(
         model,
@@ -92,11 +93,12 @@ def train(
 
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
+        epoch_train_mses = torch.zeros(len(train_loader), device=device)
         for i, (images, _) in loop:
 
             with torch.cuda.amp.autocast():
                 x_hat, mu, logVar = model.reconstruct(images)
-                loss = vae_loss(images, x_hat, mu, logVar, beta)
+                loss, mse = vae_loss(x_hat, images, mu, logVar, beta)
 
             # Update model
             scaler.scale(loss).backward()
@@ -105,17 +107,20 @@ def train(
             optimiser.zero_grad(set_to_none=True)
 
             epoch_train_losses[i] = loss.detach()
+            epoch_train_mses[i] = mse.detach()
         
         # Validation Pass
         with torch.no_grad():
             epoch_val_losses = torch.zeros(len(val_loader), device=device)
+            epoch_val_mses = torch.zeros(len(val_loader), device=device)
             for i, (images, _) in enumerate(val_loader):
 
                 with torch.cuda.amp.autocast():
                     x_hat, mu, logVar = model.reconstruct(images)
-                    loss = vae_loss(images, x_hat, mu, logVar, beta)
+                    loss, mse = vae_loss(x_hat, images, mu, logVar, beta)
 
                 epoch_val_losses[i] = loss.detach()
+                epoch_val_mses[i] = mse.detach()
 
         # single step linear classification eval
         ss_val_acc, ss_val_loss = single_step_classification_eval(model, ss_train_loader, ss_val_loader, scaler, learn_on_ss)
@@ -124,9 +129,12 @@ def train(
             scaler.update()
             optimiser.zero_grad(set_to_none=True)
         
-        last_train_loss = epoch_train_losses.mean().item()
-        last_val_loss = epoch_val_losses.mean().item()
-        postfix = {'train_loss': last_train_loss, 'val_loss': last_val_loss}
+        last_train_loss = epoch_train_losses.sum().item() / len(train_dataset)
+        last_train_mse = epoch_train_mses.sum().item() / len(train_dataset)
+        last_val_loss = epoch_val_losses.sum().item() / len(val_dataset)
+        last_val_mse = epoch_val_mses.sum().item() / len(val_dataset)
+        postfix = {'train_loss': last_train_loss, 'train_mse': last_train_mse, 'val_loss': last_val_loss, 'val_mse': last_val_mse, '1step_val_acc': ss_val_acc, '1step_val_loss': ss_val_loss}
+        loop.set_postfix(postfix)
         if writer is not None:
             writer.add_scalar('Encoder/train_loss', last_train_loss, epoch)
             writer.add_scalar('Encoder/val_loss', last_val_loss, epoch)

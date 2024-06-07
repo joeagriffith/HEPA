@@ -5,6 +5,8 @@ from tqdm import tqdm
 from Utils.functional import cosine_schedule, smooth_l1_loss
 from Examples.MNIST.mnist_linear_1k import single_step_classification_eval, get_ss_mnist_loaders
 
+def regression_loss(pred, target):
+    return 2 - 2 * (pred * target).sum(dim=-1)
 
 def train(
         online_model,
