@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from Utils.functional import cosine_schedule, smooth_l1_loss
-from Examples.MNIST.mnist_linear_1k import single_step_classification_eval, get_ss_mnist_loaders
+from Examples.MNIST.mnist_linear_1k import single_step_classification_eval, get_mnist_subset_loaders
 
 def regression_loss(pred, target):
     return 2 - 2 * (pred * target).sum(dim=-1)
@@ -48,7 +48,7 @@ def train(
 
 # ============================== Data Handling ==============================
     # Initialise dataloaders for single step classification eval
-    ss_train_loader, ss_val_loader = get_ss_mnist_loaders(batch_size, device)
+    ss_train_loader, ss_val_loader = get_mnist_subset_loaders(1, batch_size, device)
 
     # Initialise dataloaders for training and validation
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -65,6 +65,7 @@ def train(
         'augmentation': str(augmentation),
         'beta': beta,
         'learn_on_ss': learn_on_ss,
+        'transform': train_dataset.transform,
     }
 
     # Log training options, model details, and optimiser details
@@ -81,6 +82,8 @@ def train(
 
 # ============================== Training Loop ==============================
     for epoch in range(num_epochs):
+        online_model.train()
+        target_model.train()
         train_dataset.apply_transform(batch_size=batch_size)
         loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
         loop.set_description(f'Epoch [{epoch}/{num_epochs}]')
@@ -94,6 +97,7 @@ def train(
         for param_group in optimiser.param_groups:
             if param_group['weight_decay'] != 0:
                 param_group['weight_decay'] = wds[epoch].item()
+                
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
         for i, (images, _) in loop:

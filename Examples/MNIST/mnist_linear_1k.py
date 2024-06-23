@@ -8,10 +8,42 @@ from Utils.dataset import PreloadedDataset
 from tqdm import tqdm
 import torch.nn.functional as F
 
+def get_mnist_subset_datasets(n_per_class, transform=None, device=torch.device('cpu')):
+    # Load data
+    dataset = datasets.MNIST(root='../Datasets/', train=True, transform=transforms.ToTensor(), download=True)
+    if transform is None:
+        transform = transforms.ToTensor()
 
+    # Build train dataset
+    train_indices = []
+    for i in range(10):
+        idxs = torch.where(dataset.targets == i)[0][:n_per_class]
+        train_indices.append(idxs)
+    train_indices = torch.cat(train_indices)
+    train = PreloadedDataset.from_dataset(dataset, transform, device)
+    train.images = train.images[train_indices]
+    train.transformed_images = train.transformed_images[train_indices]
+    train.targets = train.targets[train_indices]
 
-def mnist_linear_1k_eval(
+    # Build val dataset
+    _, val_dataset = torch.utils.data.random_split(dataset, [50000, 10000])
+    val = PreloadedDataset.from_dataset(val_dataset, transforms.ToTensor(), device)
+
+    return train, val
+
+def get_mnist_subset_loaders(n_per_class, batch_size, transform=None, device=torch.device('cpu')):
+
+    train, val = get_mnist_subset_datasets(n_per_class, transform, device)
+
+    # Build data loaders
+    train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val, batch_size=1000, shuffle=False)
+
+    return train_loader, val_loader
+
+def mnist_linear_eval(
     model: nn.Module,
+    n_per_class: int,
     writer: SummaryWriter = None,
     flatten: bool = False,
     test: bool = False,
@@ -22,29 +54,9 @@ def mnist_linear_1k_eval(
     # Create classifier and specify training parameters
     classifier = nn.Linear(model.num_features, 10, bias=False).to(device)
     num_epochs = 100
-    batch_size = 50
+    batch_size = n_per_class
     lr = 0.01
     optimiser = torch.optim.AdamW(classifier.parameters(), lr=lr)
-
-    # Load data
-    dataset = datasets.MNIST(root='../Datasets/', train=True, transform=transforms.ToTensor(), download=True)
-    _, val_dataset = torch.utils.data.random_split(dataset, [50000, 10000])
-    train1k = PreloadedDataset.from_dataset(dataset, transforms.ToTensor(), device)
-    val = PreloadedDataset.from_dataset(val_dataset, transforms.ToTensor(), device)
-
-    # Reduce to 1000 samples, 100 from each class.
-    indices = []
-    for i in range(10):
-        idx = train1k.targets == i
-        indices.append(torch.where(idx)[0][:100])
-    indices = torch.cat(indices)
-    train1k.images = train1k.images[indices]
-    train1k.transformed_images = train1k.transformed_images[indices]
-    train1k.targets = train1k.targets[indices]
-
-    # Build data loaders
-    train_loader = DataLoader(train1k, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val, batch_size=batch_size, shuffle=False)
 
     scaler = torch.cuda.amp.GradScaler()
 
@@ -53,6 +65,8 @@ def mnist_linear_1k_eval(
     last_val_loss = torch.tensor(-1, device=device)
     last_val_acc = torch.tensor(-1, device=device)
     best_val_acc = torch.tensor(-1, device=device)
+
+    train_loader, val_loader = get_mnist_subset_loaders(n_per_class, batch_size, device=device)
 
     postfix = {}
     for epoch in range(num_epochs):
@@ -134,30 +148,6 @@ def mnist_linear_1k_eval(
         writer.add_scalar('Classifier/test_acc', test_acc)
 
     print(f'Best validation accuracy: {best_val_acc.item()}')
-
-
-def get_ss_mnist_loaders(batch_size, device=torch.device('cpu')):
-    # # Prepare data for single step classification eval
-    # Load data
-    dataset = datasets.MNIST(root='../Datasets/', train=True, transform=transforms.ToTensor(), download=True)
-    train1k = PreloadedDataset.from_dataset(dataset, transforms.ToTensor(), device)
-    _, val_dataset = torch.utils.data.random_split(dataset, [50000, 10000])
-    val = PreloadedDataset.from_dataset(val_dataset, transforms.ToTensor(), device)
-    # Reduce to 1000 samples, 100 from each class.
-    indices = []
-    for i in range(10):
-        idx = train1k.targets == i
-        indices.append(torch.where(idx)[0][:100])
-    indices = torch.cat(indices)
-    train1k.images = train1k.images[indices]
-    train1k.transformed_images = train1k.transformed_images[indices]
-    train1k.targets = train1k.targets[indices]
-    # Build data loaders
-    ss_train_loader = DataLoader(train1k, batch_size=100, shuffle=True)
-    ss_val_loader = DataLoader(val, batch_size=batch_size, shuffle=False)
-
-    return ss_train_loader, ss_val_loader
-
 
 def single_step_classification_eval(
         encoder,

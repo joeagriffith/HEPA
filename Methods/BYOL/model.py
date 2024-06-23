@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.nets import mnist_cnn_encoder
 
 class BYOL(nn.Module):
     def __init__(self, in_features, backbone='mnist_cnn'):
@@ -39,7 +39,6 @@ class BYOL(nn.Module):
         elif backbone == 'mnist_cnn':
             self.num_features = 256
             self.encoder = mnist_cnn_encoder(self.num_features)
-
 
         self.project = nn.Sequential(
             nn.Linear(self.num_features, 1024, bias=False),

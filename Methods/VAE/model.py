@@ -49,7 +49,14 @@ class VAE(nn.Module):
         
         self.mu = nn.Linear(self.h_dim, z_dim)
         self.logVar = nn.Linear(self.h_dim, z_dim)
-        self.z2h = nn.Linear(z_dim, self.h_dim)
+        self.z2h = nn.Sequential(
+            nn.Linear(z_dim, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, self.h_dim)
+        )
+        # self.z2h = nn.Linear(z_dim, self.h_dim)
 
         #for Mnist (-1, 1, 28, 28)
         self.decoder = mnist_cnn_decoder(self.h_dim)

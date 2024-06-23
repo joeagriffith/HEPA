@@ -31,7 +31,6 @@ class HEPA(nn.Module):
             self.encoder = resnet18()
             self.encoder.conv1 = nn.Conv2d(in_features, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
             self.encoder.maxpool = nn.Identity()
-            # self.encoder.fc = nn.Flatten()
             self.encoder.fc = nn.Linear(512, 256)
             self.num_features = 256
 
@@ -66,11 +65,12 @@ class HEPA(nn.Module):
         self.decoder = mnist_cnn_decoder(self.num_features)
 
     def forward(self, x, stop_at=None):
-        if self.backbone == 'mnist_cnn':
-            z = self.encoder(x, stop_at)
+        if stop_at == 0:
+            return x
+        elif stop_at == 'L' or stop_at is None:
+            return self.encoder(x)
         else:
-            z = self.encoder(x)
-        return z
+            raise(NotImplementedError)
     
     def predict(self, x, a=None, stop_at=None):
         if a is None:
@@ -79,7 +79,12 @@ class HEPA(nn.Module):
         z = self.encoder(x)
         a = self.action_encoder(a)
         z_pred = self.transition(torch.cat([z, a], dim=1))
-        pred = self.decoder(z_pred, stop_at)
+        if stop_at == 'L':
+            pred = z_pred
+        elif stop_at == 0:
+            pred = self.decoder(z_pred)
+        else:
+            raise(NotImplementedError)
         return pred
     
     def copy(self):

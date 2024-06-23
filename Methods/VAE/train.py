@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as F_v2
 from tqdm import tqdm
-from Examples.MNIST.mnist_linear_1k import single_step_classification_eval, get_ss_mnist_loaders
+from Examples.MNIST.mnist_linear_1k import single_step_classification_eval, get_mnist_subset_loaders
 from Utils.functional import smooth_l1_loss, cosine_schedule
 
 import os
@@ -44,7 +44,7 @@ def train(
     wds = cosine_schedule(start_wd, end_wd, num_epochs)
 
 # ============================== Data Handling ==============================
-    ss_train_loader, ss_val_loader = get_ss_mnist_loaders(batch_size, device)
+    ss_train_loader, ss_val_loader = get_mnist_subset_loaders(1, batch_size, device)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -56,6 +56,7 @@ def train(
         'num_epochs': num_epochs,
         'batch_size': batch_size,
         'beta': beta,
+        'transform': train_dataset.transform,
     }
 
     # Log training options, model details, and optimiser details

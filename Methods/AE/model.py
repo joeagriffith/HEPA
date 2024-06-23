@@ -43,16 +43,33 @@ class AE(nn.Module):
         elif backbone == 'mnist_cnn':
             self.num_features = 256
             self.encoder = mnist_cnn_encoder(self.num_features)
+        
+        elif backbone == 'none':
+            self.num_features = 784
+            self.encoder = nn.Flatten()
+
+        self.pre_decode = nn.Sequential(
+            nn.Linear(self.num_features, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, self.num_features)
+        )
 
         #for Mnist (-1, 1, 28, 28)
         # No BN, makes it worse
         self.decoder = mnist_cnn_decoder(self.num_features)
 
+    def decode(self, x):
+        x = self.pre_decode(x)
+        x = self.decoder(x)
+        return x
+    
     def forward(self, x):
         z = self.encoder(x)
         return z
     
     def reconstruct(self, x):
         z = self.encoder(x)
-        pred = self.decoder(z)
+        pred = self.decode(z)
         return pred

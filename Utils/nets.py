@@ -49,51 +49,53 @@ class mnist_cnn_encoder(nn.Module):
             EncBlock(256, num_features, 3, 1, 0, bn=False),
         ])
     
-    def forward(self, x, stop_at=None):
-        for i, block in enumerate(self.enc_blocks):
-            if i == stop_at:
-                break
+    def forward(self, x):
+        for block in self.enc_blocks:
             x = block(x)
-        if stop_at is not None:
-            return x
-        else:
-            return x.flatten(1)
+        return x.flatten(1)
 
 class mnist_cnn_decoder(nn.Module):
     def __init__(self, num_features):
         super().__init__()
-        self.dec_blocks = nn.ModuleList([
-            DecBlock(num_features, 256, 3, 1, 0),
-            DecBlock(256, 128, 3, 1, 0),
-            DecBlock(128, 64, 3, 1, 0),
-            DecBlock(64, 32, 3, 1, 1, upsample=True),
-            DecBlock(32, 1, 3, 1, 1, upsample=True),
+        # self.dec_blocks = nn.ModuleList([
+        #     DecBlock(num_features, 256, 3, 1, 0),
+        #     DecBlock(256, 128, 3, 1, 0),
+        #     DecBlock(128, 64, 3, 1, 0),
+        #     DecBlock(64, 32, 3, 1, 1, upsample=True),
+        #     DecBlock(32, 1, 3, 1, 1, upsample=True),
+        # ])
 
-            # nn.ConvTranspose2d(num_features, 256, 3, 1),
-            # nn.ReLU(),
-
-            # nn.ConvTranspose2d(256, 128, 3, 3),
-            # nn.ReLU(),
-            
-            # nn.ConvTranspose2d(128, 64, 3, 3),
-            # nn.ReLU(),
-            
-            # nn.ConvTranspose2d(64, 32, 2, 1),
-            # nn.ReLU(),
-            # nn.Conv2d(32, 1, 3, 1, 1),
-        ])
-
-    def forward(self, z, stop_at=None):
-        z = z.view(-1, 256, 1, 1)
-        for i, block in enumerate(self.dec_blocks):
-            if stop_at is not None and i == len(self.dec_blocks) - stop_at:
-                break
-            z = block(z)
-            if i < len(self.dec_blocks) - 1:
-                z = F.relu(z)
+    # def forward(self, z, stop_at=None):
+        # z = z.view(-1, 256, 1, 1)
+        # for i, block in enumerate(self.dec_blocks):
+        #     if stop_at is not None and i == len(self.dec_blocks) - stop_at:
+        #         break
+        #     z = block(z)
+        #     if i < len(self.dec_blocks) - 1:
+        #         z = F.relu(z)
             # else:
             #     z = F.sigmoid(z)
-        return z
+        # return z
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(num_features, 256, 3, 1),
+            nn.ReLU(),
+
+            nn.ConvTranspose2d(256, 128, 3, 3),
+            nn.ReLU(),
+            
+            nn.ConvTranspose2d(128, 64, 3, 3),
+            nn.ReLU(),
+            
+            nn.ConvTranspose2d(64, 32, 2, 1),
+            nn.ReLU(),
+            nn.Conv2d(32, 1, 3, 1, 1),
+        )
+
+    def forward(self, z):
+        z = z.view(-1, 256, 1, 1)
+        return self.decoder(z)
+
 
 class ViTEncoder(nn.Module):
     """Transformer Model Encoder for sequence to sequence translation."""
