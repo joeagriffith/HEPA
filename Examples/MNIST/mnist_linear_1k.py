@@ -8,6 +8,8 @@ from Utils.dataset import PreloadedDataset
 from tqdm import tqdm
 import torch.nn.functional as F
 
+from Utils.functional import feature_correlation, feature_std
+
 def get_mnist_subset_datasets(n_per_class, transform=None, device=torch.device('cpu')):
     # Load data
     dataset = datasets.MNIST(root='../Datasets/', train=True, transform=transforms.ToTensor(), download=True)
@@ -47,18 +49,38 @@ def mnist_linear_eval(
     writer: SummaryWriter = None,
     flatten: bool = False,
     test: bool = False,
+    finetune: bool = False,
 ):
     device = next(model.parameters()).device
-    model.eval()
 
     # Create classifier and specify training parameters
     classifier = nn.Linear(model.num_features, 10, bias=False).to(device)
-    num_epochs = 100
     batch_size = n_per_class
+    num_epochs = 100
     lr = 0.01
-    optimiser = torch.optim.AdamW(classifier.parameters(), lr=lr)
 
-    scaler = torch.cuda.amp.GradScaler()
+    if finetune:
+        encoder = model.copy()
+        encoder.train()
+        
+        param_dict = {pn: p for pn, p in encoder.named_parameters()}
+        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+
+        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+        nondecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+        optim_groups = [
+            {'params': decay_params, 'weight_decay': 0.01}, 
+            {'params': nondecay_params, 'weight_decay': 0.0},
+            {'params': classifier.parameters(), 'weight_decay': 0.01}
+        ]
+    else:
+        encoder = model
+        encoder.eval()
+        optim_groups = [
+            {'params': classifier.parameters(), 'weight_decay': 0.01}
+        ]
+
+    optimiser = torch.optim.AdamW(optim_groups, lr=lr)
 
     last_train_loss = torch.tensor(-1, device=device)
     last_train_acc = torch.tensor(-1, device=device)
@@ -79,15 +101,13 @@ def mnist_linear_eval(
         for i, (x, y) in loop:
             if flatten:
                 x = x.flatten(1)
-            with torch.cuda.amp.autocast():
-                with torch.no_grad():
-                    z = model(x)
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+                z = encoder(x)
                 y_pred = classifier(z)
                 loss = F.cross_entropy(y_pred, y)
             optimiser.zero_grad(set_to_none=True)
-            scaler.scale(loss).backward()
-            scaler.step(optimiser)
-            scaler.update()
+            loss.backward()
+            optimiser.step()
 
             epoch_train_loss[i] = loss.detach()
             epoch_train_acc[i] = (y_pred.argmax(dim=1) == y).float().mean().detach()
@@ -101,8 +121,8 @@ def mnist_linear_eval(
             for i, (x, y) in enumerate(val_loader):
                 if flatten:
                     x = x.flatten(1)
-                with torch.cuda.amp.autocast():
-                    z = model(x)
+                with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+                    z = encoder(x)
                     y_pred = classifier(z)
                     loss = F.cross_entropy(y_pred, y)
                 epoch_val_loss[i] += loss.detach()
@@ -138,8 +158,8 @@ def mnist_linear_eval(
             for i, (x, y) in enumerate(test_loader):
                 if flatten:
                     x = x.flatten(1)
-                with torch.cuda.amp.autocast():
-                    z = model(x)
+                with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+                    z = encoder(x)
                     y_pred = classifier(z)
                 test_accs[i] = (y_pred.argmax(dim=1) == y).float().mean()
 
@@ -153,8 +173,6 @@ def single_step_classification_eval(
         encoder,
         train_loader,
         val_loader,
-        scaler,
-        learn_encoder=False,
         flatten=False,
 ):
     encoder.eval()
@@ -166,20 +184,16 @@ def single_step_classification_eval(
     for i, (images, labels) in enumerate(train_loader):
         if flatten:
             images = images.flatten(1)
-        with torch.cuda.amp.autocast():
-            if learn_encoder:
-                z = encoder(images)        
-            else:
-                with torch.no_grad():
-                    z = encoder(images)
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+            with torch.no_grad():
+                z = encoder(images)
 
             y_pred = classifier(z)
             loss = F.cross_entropy(y_pred, labels)
 
         optimiser.zero_grad(set_to_none=True)
-        scaler.scale(loss).backward()
-        scaler.step(optimiser)
-        scaler.update()
+        loss.backward()
+        optimiser.step()
 
     val_accs = torch.zeros(len(val_loader), device=device)
     val_losses = torch.zeros(len(val_loader), device=device)
@@ -187,7 +201,7 @@ def single_step_classification_eval(
         for i, (images, labels) in enumerate(val_loader):
             if flatten:
                 images = images.flatten(1)
-            with torch.cuda.amp.autocast():
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 with torch.no_grad():
                     z = encoder(images)        
                 y_pred = classifier(z)
@@ -198,3 +212,48 @@ def single_step_classification_eval(
     val_loss = val_losses.mean().item()
 
     return val_acc, val_loss
+
+def get_rep_metrics(
+    model: nn.Module,
+    dataset: PreloadedDataset,
+    flatten: bool = False,
+    corr: bool = True,
+    std: bool = True,
+):
+    device = next(model.parameters()).device
+    loader = DataLoader(dataset, batch_size=100, shuffle=False)
+
+    embeddings = torch.empty(len(dataset), model.num_features, device=device)
+    with torch.no_grad():
+        for i, (x, _) in enumerate(loader):
+            if flatten:
+                x = x.flatten(1)
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+                z = model(x)
+            embeddings[i * 100:(i + 1) * 100] = z
+
+    metrics = {}
+    if corr:
+        metrics['corr'] = feature_correlation(embeddings).item()
+    if std:
+        metrics['std'] = feature_std(embeddings).item()
+
+    return metrics
+
+def eval_representations(
+    model: nn.Module,
+    flatten: bool = False,
+    writer: SummaryWriter = None,
+):
+    device = next(model.parameters()).device
+
+    t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)
+    test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device)
+
+    metrics = get_rep_metrics(model, test, flatten=flatten, corr=True, std=True)
+    
+    if writer is not None:
+        for key, value in metrics.items():
+            writer.add_scalar(f'Encoder/test-{key}', value)
+    
+    return metrics

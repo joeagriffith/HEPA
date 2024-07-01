@@ -17,7 +17,6 @@ def train(
         batch_size,
         augmentation,
         beta=None,
-        learn_on_ss=False,
         writer=None,
         save_dir=None,
         save_every=1,
@@ -48,7 +47,7 @@ def train(
 
 # ============================== Data Handling ==============================
     # Initialise dataloaders for single step classification eval
-    ss_train_loader, ss_val_loader = get_mnist_subset_loaders(1, batch_size, device)
+    ss_train_loader, ss_val_loader = get_mnist_subset_loaders(1, batch_size, device=device)
 
     # Initialise dataloaders for training and validation
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -64,7 +63,6 @@ def train(
         'batch_size': batch_size,
         'augmentation': str(augmentation),
         'beta': beta,
-        'learn_on_ss': learn_on_ss,
         'transform': train_dataset.transform,
     }
 
@@ -101,14 +99,15 @@ def train(
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
         for i, (images, _) in loop:
-            with torch.cuda.amp.autocast():
-                with torch.no_grad():
-                    # Augment images
-                    x1, x2 = augmentation(images), augmentation(images)
+            with torch.no_grad():
+                # Augment images
+                x1, x2 = augmentation(images), augmentation(images)
+                with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                     y1_t, y2_t = target_model(x1), target_model(x2)
                     z1_t, z2_t = target_model.project(y1_t), target_model.project(y2_t)
                     z1_t, z2_t = F.normalize(z1_t, dim=-1), F.normalize(z2_t, dim=-1)
 
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 y1_o, y2_o = online_model(x1), online_model(x2)
                 z1_o, z2_o = online_model.project(y1_o), online_model.project(y2_o)
                 p1_o, p2_o = online_model.predict(z1_o), online_model.predict(z2_o)
@@ -121,9 +120,11 @@ def train(
 
 
             # Update online model
-            scaler.scale(loss).backward()
-            scaler.step(optimiser)
-            scaler.update()
+            # scaler.scale(loss).backward()
+            # scaler.step(optimiser)
+            # scaler.update()
+            loss.backward()
+            optimiser.step()
             optimiser.zero_grad(set_to_none=True)
 
             # Update target model
@@ -135,11 +136,14 @@ def train(
         
         # Validation Pass
         with torch.no_grad():
+            online_model.eval()
+            target_model.eval()
             epoch_val_losses = torch.zeros(len(val_loader), device=device)
             for i, (images, _) in enumerate(val_loader):
-                with torch.cuda.amp.autocast():
+                # with torch.cuda.amp.autocast():
                     # Augment images
-                    x1, x2 = augmentation(images), augmentation(images)
+                x1, x2 = augmentation(images), augmentation(images)
+                with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                     y1_t, y2_t = target_model(x1), target_model(x2)
                     z1_t, z2_t = target_model.project(y1_t), target_model.project(y2_t)
                     z1_t, z2_t = F.normalize(z1_t, dim=-1), F.normalize(z2_t, dim=-1)
@@ -157,11 +161,7 @@ def train(
                     epoch_val_losses[i] = loss.detach()
 
         # single step linear classification eval
-        ss_val_acc, ss_val_loss = single_step_classification_eval(online_model, ss_train_loader, ss_val_loader, scaler, learn_on_ss)
-        if learn_on_ss:
-            scaler.step(optimiser)
-            scaler.update()
-            optimiser.zero_grad(set_to_none=True)
+        ss_val_acc, ss_val_loss = single_step_classification_eval(online_model, ss_train_loader, ss_val_loader)
         
         last_train_loss = epoch_train_losses.mean().item()
         last_val_loss = epoch_val_losses.mean().item()

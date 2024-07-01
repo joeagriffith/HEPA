@@ -58,12 +58,10 @@ class AE(nn.Module):
 
         #for Mnist (-1, 1, 28, 28)
         # No BN, makes it worse
-        self.decoder = mnist_cnn_decoder(self.num_features)
-
-    def decode(self, x):
-        x = self.pre_decode(x)
-        x = self.decoder(x)
-        return x
+        self.decoder = nn.Sequential(
+            self.pre_decode,
+            mnist_cnn_decoder(self.num_features),
+        )
     
     def forward(self, x):
         z = self.encoder(x)
@@ -71,5 +69,5 @@ class AE(nn.Module):
     
     def reconstruct(self, x):
         z = self.encoder(x)
-        pred = self.decode(z)
+        pred = self.decoder(z)
         return pred

@@ -1,0 +1,28 @@
+Preamble:
+	Big goal: Perception
+
+	studying Predictive Coding
+		- neuroscience-inspired algorithm
+		- the brain optimises representations by minimising prediction error
+		- I was finding-optimal performance in current implementations and couldn't advance the framework
+
+	studying representation learning
+		- the more general problem I was attempting to solve
+
+	Self-supervised learning SOTA
+		- very similar problem bit not constrained by bio-plausibility
+		- typical approaches maximised invariance to perturbation.
+		- observed a trend towards predictive Latent-space models, JEPA
+
+Research
+
+	Self-supervised Predictive Architectures
+		- viewing it from a more agentic perspective, I developed this forward predictive method, for both latent and generative methods
+		- I found great performance in the algorithm very quickly.
+			- The algorithm is really robust and easy to train
+			- only issue is when the decoder isn't sufficiently flexible.
+
+	Future work:
+		- evaluate prediction at different levels of the encoding hierarchy. preliminaries show promising results at lvl 2.
+		- compare with more contemporary methods, I-JEPA & MAE
+		- scale-up experimentation with different datasets: another image dataset, 3d dataset, reinforcement-learning environment

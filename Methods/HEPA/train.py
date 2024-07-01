@@ -2,8 +2,9 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as F_v2
 from tqdm import tqdm
-from Examples.MNIST.mnist_linear_1k import single_step_classification_eval, get_mnist_subset_loaders
-from Utils.functional import smooth_l1_loss, cosine_schedule, augment
+from Examples.MNIST.mnist_linear_1k import single_step_classification_eval, get_mnist_subset_loaders, get_rep_metrics
+from Utils.functional import smooth_l1_loss, cosine_schedule
+from Utils.functional import augment
 
 import os
 
@@ -122,8 +123,6 @@ def train(
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 # ============================== Training Stuff ==============================
-    scaler = torch.cuda.amp.GradScaler()
-
     if loss_fn == 'mse':
         loss_fn = lambda x, y, _: F.mse_loss(x, y, reduction='none').sum(dim=(-1)).mean()
     elif loss_fn == 'normalised_mse':
@@ -182,20 +181,16 @@ def train(
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
         for i, (images, _) in loop:
-            with torch.cuda.amp.autocast():
+            images_aug, action = augment(images, aug_ps[epoch])
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 with torch.no_grad():
-                    images_aug, action = augment(images, aug_ps[epoch])
                     targets = target_model(images_aug, stop_at)
-                    
                 preds = online_model.predict(images, action, stop_at)
-                
-                # loss = F.mse_loss(preds, targets, reduction='none').sum(dim=(-1)).mean()
                 loss = loss_fn(preds, targets, epoch)
 
             # Update model
-            scaler.scale(loss).backward()
-            scaler.step(optimiser)
-            scaler.update()
+            loss.backward()
+            optimiser.step()
             optimiser.zero_grad(set_to_none=True)
 
             # Update target model
@@ -211,24 +206,23 @@ def train(
         with torch.no_grad():
             epoch_val_losses = torch.zeros(len(val_loader), device=device)
             for i, (images, _) in enumerate(val_loader):
-                with torch.cuda.amp.autocast():
-                    # Create Target Image and Action vector
-                    images_aug, action = augment(images, val_aug_ps[epoch])
+                # Create Target Image and Action vector
+                images_aug, action = augment(images, val_aug_ps[epoch])
+                with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                     targets = target_model(images_aug, stop_at)
-
                     preds = online_model.predict(images, action, stop_at)
-
-                    # loss = F.mse_loss(preds, targets, reduction='none').sum(dim=(-1)).mean()
                     loss = loss_fn(preds, targets, epoch)
 
                 epoch_val_losses[i] = loss.detach()
 
+        # evaluate representations
+        if writer is not None:
+            rep_metrics = get_rep_metrics(online_model, val_dataset)
+            writer.add_scalar('Encoder/feature_corr', rep_metrics['corr'], epoch)
+            writer.add_scalar('Encoder/feature_std', rep_metrics['std'], epoch)
+
         # single step linear classification eval
-        ss_val_acc, ss_val_loss = single_step_classification_eval(online_model, ss_train_loader, ss_val_loader, scaler, learn_on_ss)
-        if learn_on_ss:
-            scaler.step(optimiser)
-            scaler.update()
-            optimiser.zero_grad(set_to_none=True)
+        ss_val_acc, ss_val_loss = single_step_classification_eval(online_model, ss_train_loader, ss_val_loader)
         
         last_train_loss = epoch_train_losses.mean().item()
         last_val_loss = epoch_val_losses.mean().item()

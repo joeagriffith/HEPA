@@ -21,7 +21,6 @@ def train(
         num_epochs,
         batch_size,
         beta=None,
-        learn_on_ss=False,
         writer=None,
         save_dir=None,
         save_every=1,
@@ -44,14 +43,12 @@ def train(
     wds = cosine_schedule(start_wd, end_wd, num_epochs)
 
 # ============================== Data Handling ==============================
-    ss_train_loader, ss_val_loader = get_mnist_subset_loaders(1, batch_size, device)
+    ss_train_loader, ss_val_loader = get_mnist_subset_loaders(1, batch_size, device=device)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 # ============================== Training Stuff ==============================
-    scaler = torch.cuda.amp.GradScaler()
-
     train_options = {
         'num_epochs': num_epochs,
         'batch_size': batch_size,
@@ -78,6 +75,7 @@ def train(
 
 # ============================== Training Loop ==============================
     for epoch in range(num_epochs):
+        model.train()
         train_dataset.apply_transform(batch_size=batch_size)
         loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
         loop.set_description(f'Epoch [{epoch}/{num_epochs}]')
@@ -97,26 +95,27 @@ def train(
         epoch_train_mses = torch.zeros(len(train_loader), device=device)
         for i, (images, _) in loop:
 
-            with torch.cuda.amp.autocast():
+            optimiser.zero_grad(set_to_none=True)
+
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 x_hat, mu, logVar = model.reconstruct(images)
                 loss, mse = vae_loss(x_hat, images, mu, logVar, beta)
 
             # Update model
-            scaler.scale(loss).backward()
-            scaler.step(optimiser)
-            scaler.update()
-            optimiser.zero_grad(set_to_none=True)
+            loss.backward()
+            optimiser.step()
 
             epoch_train_losses[i] = loss.detach()
             epoch_train_mses[i] = mse.detach()
         
         # Validation Pass
+        model.eval()
         with torch.no_grad():
             epoch_val_losses = torch.zeros(len(val_loader), device=device)
             epoch_val_mses = torch.zeros(len(val_loader), device=device)
             for i, (images, _) in enumerate(val_loader):
 
-                with torch.cuda.amp.autocast():
+                with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                     x_hat, mu, logVar = model.reconstruct(images)
                     loss, mse = vae_loss(x_hat, images, mu, logVar, beta)
 
@@ -124,11 +123,7 @@ def train(
                 epoch_val_mses[i] = mse.detach()
 
         # single step linear classification eval
-        ss_val_acc, ss_val_loss = single_step_classification_eval(model, ss_train_loader, ss_val_loader, scaler, learn_on_ss)
-        if learn_on_ss:
-            scaler.step(optimiser)
-            scaler.update()
-            optimiser.zero_grad(set_to_none=True)
+        ss_val_acc, ss_val_loss = single_step_classification_eval(model, ss_train_loader, ss_val_loader)
         
         last_train_loss = epoch_train_losses.sum().item() / len(train_dataset)
         last_train_mse = epoch_train_mses.sum().item() / len(train_dataset)

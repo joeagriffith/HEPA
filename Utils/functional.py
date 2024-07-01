@@ -96,3 +96,25 @@ def augment(images, p):
     action = torch.tensor([angle/180, translate_x/8, translate_y/8, (scale-1.0)/0.25, shear/25], dtype=torch.float32, device=images.device).unsqueeze(0).repeat(images.shape[0], 1)
 
     return images_aug, action
+
+def feature_correlation(x):
+    # x: (N, C)
+    # Normalize
+    mean = x.mean(dim=0, keepdim=True)
+    std = x.std(dim=0, keepdim=True)
+    x = (x - mean) / (std + 1e-8)
+    # Compute correlation
+    corr = torch.matmul(x.T, x) / x.size(0)
+    # select above diagonal
+    corr = torch.triu(corr, diagonal=1)
+    corr = corr[corr != 0]
+    # average
+    corr = corr.mean()
+
+    return corr
+
+def feature_std(x):
+    # x: (N, C)
+    x = F.normalize(x, dim=1)
+    return x.std(dim=0, keepdim=True).mean()
+

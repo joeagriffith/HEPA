@@ -1,11 +1,13 @@
-- 5run comparative eval of VAE, AE, HEPA-best, BYOL
-- decoder optimisation for each level of HEPA
+- optimise VAE
+- retrain all models and 
+    - SAVE MODELS
+    - collect feature_corr and feature_std during training and test 
+    - perform semi-supervised mnist linear evals 
+
 - Make visualisations of Reconstructed using HEPA-0
-- Ablation tests
-    - action is 0 for all augmentations during training Essentially Autoencoder
-        - which HEPA-X should i do? maybe just HEPA-0, compare to AE
-    - attempt prediction without action
-    -    
+
+- test on ModelNet dataset
+
 - Better name that generalises to pixel-space, hidden-space and latent-space prediction
     - VESPA - Variable Embedding-Space Predictive Architecture
     - SESPA - Selective Embedding-Space Predictive Architecture
