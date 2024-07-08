@@ -54,8 +54,11 @@ def mnist_linear_eval(
     device = next(model.parameters()).device
 
     # Create classifier and specify training parameters
-    classifier = nn.Linear(model.num_features, 10, bias=False).to(device)
-    batch_size = n_per_class
+    classifier = nn.Sequential(
+        # nn.BatchNorm1d(model.num_features, affine=False),
+        nn.Linear(model.num_features, 10, bias=False),
+    ).to(device)
+    batch_size = max(n_per_class, 10)
     num_epochs = 100
     lr = 0.01
 
@@ -71,13 +74,13 @@ def mnist_linear_eval(
         optim_groups = [
             {'params': decay_params, 'weight_decay': 0.01}, 
             {'params': nondecay_params, 'weight_decay': 0.0},
-            {'params': classifier.parameters(), 'weight_decay': 0.01}
+            {'params': classifier.parameters(), 'weight_decay': 0.0}
         ]
     else:
         encoder = model
         encoder.eval()
         optim_groups = [
-            {'params': classifier.parameters(), 'weight_decay': 0.01}
+            {'params': classifier.parameters(), 'weight_decay': 0.0}
         ]
 
     optimiser = torch.optim.AdamW(optim_groups, lr=lr)
@@ -134,10 +137,16 @@ def mnist_linear_eval(
                 best_val_acc = last_val_acc
         
         if writer is not None:
-            writer.add_scalar('Classifier/train_loss', last_train_loss.item(), epoch)
-            writer.add_scalar('Classifier/train_acc', last_train_acc.item(), epoch)
-            writer.add_scalar('Classifier/val_loss', last_val_loss.item(), epoch)
-            writer.add_scalar('Classifier/val_acc', last_val_acc.item(), epoch)
+            if finetune:
+                writer.add_scalar('Classifier/ft_train_loss', last_train_loss.item(), epoch)
+                writer.add_scalar('Classifier/ft_train_acc', last_train_acc.item(), epoch)
+                writer.add_scalar('Classifier/ft_val_loss', last_val_loss.item(), epoch)
+                writer.add_scalar('Classifier/ft_val_acc', last_val_acc.item(), epoch)
+            else:
+                writer.add_scalar('Classifier/train_loss', last_train_loss.item(), epoch)
+                writer.add_scalar('Classifier/train_acc', last_train_acc.item(), epoch)
+                writer.add_scalar('Classifier/val_loss', last_val_loss.item(), epoch)
+                writer.add_scalar('Classifier/val_acc', last_val_acc.item(), epoch)
         
         postfix = {
             'train_loss': last_train_loss.item(),
@@ -165,7 +174,11 @@ def mnist_linear_eval(
 
         test_acc = test_accs.mean().item()
         print(f'Test accuracy: {test_acc}')
-        writer.add_scalar('Classifier/test_acc', test_acc)
+        if writer is not None:
+            if finetune:
+                writer.add_scalar('Classifier/ft_test_acc', test_acc)
+            else:
+                writer.add_scalar('Classifier/test_acc', test_acc)
 
     print(f'Best validation accuracy: {best_val_acc.item()}')
 
@@ -178,8 +191,11 @@ def single_step_classification_eval(
     encoder.eval()
     device = next(encoder.parameters()).device
 
-    classifier = torch.nn.Linear(encoder.num_features, 10, bias=False).to(device)
-    optimiser = torch.optim.AdamW(classifier.parameters(), lr=1e-1, weight_decay=1e-4)
+    classifier = nn.Sequential(
+        nn.BatchNorm1d(encoder.num_features, affine=False),
+        nn.Linear(encoder.num_features, 10, bias=False),
+    ).to(device)
+    optimiser = torch.optim.AdamW(classifier.parameters(), lr=1e-1, weight_decay=0.0)
 
     for i, (images, labels) in enumerate(train_loader):
         if flatten:

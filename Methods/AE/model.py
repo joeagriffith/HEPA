@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
@@ -71,3 +72,13 @@ class AE(nn.Module):
         z = self.encoder(x)
         pred = self.decoder(z)
         return pred
+
+    def train_step(self, img1, img2, actions, teacher, epoch):
+        assert img2 is None, 'img2 should be None for AE.train_step()'
+        assert actions is None, 'actions should be None for AE.train_step()'
+        assert teacher is None, 'teacher should be None for AE.train_step()'
+
+        with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
+            preds = self.reconstruct(img1)
+            loss = F.mse_loss(preds, img1)
+        return loss

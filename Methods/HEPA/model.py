@@ -1,16 +1,18 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
 from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
 
 class HEPA(nn.Module):
-    def __init__(self, in_features, num_actions, backbone='mnist_cnn'):
+    def __init__(self, in_features, num_actions, stop_at=0, backbone='mnist_cnn'):
         super().__init__()
         self.in_features = in_features
         self.num_actions = num_actions
         self.backbone = backbone
+        self.stop_at = stop_at # where to perform prediction, 0 = observation space, -1 = latent space
 
         # MNIST ONLY
         if backbone == 'vit':
@@ -64,10 +66,10 @@ class HEPA(nn.Module):
         #for Mnist (-1, 1, 28, 28)
         self.decoder = mnist_cnn_decoder(self.num_features)
 
-    def forward(self, x, stop_at=None):
+    def forward(self, x, stop_at=-1):
         if stop_at == 0:
             return x
-        elif stop_at == 'L' or stop_at is None:
+        elif stop_at == -1:
             return self.encoder(x)
         else:
             raise(NotImplementedError)
@@ -79,7 +81,7 @@ class HEPA(nn.Module):
         z = self.encoder(x)
         a = self.action_encoder(a)
         z_pred = self.transition(torch.cat([z, a], dim=1))
-        if stop_at == 'L':
+        if stop_at == -1:
             pred = z_pred
         elif stop_at == 0:
             pred = self.decoder(z_pred)
@@ -91,3 +93,11 @@ class HEPA(nn.Module):
         model = HEPA(self.in_features, self.num_actions, self.backbone).to(next(self.parameters()).device)
         model.load_state_dict(self.state_dict())
         return model
+
+    def train_step(self, img1, img2, actions, teacher, epoch):
+        with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
+            with torch.no_grad():
+                targets = teacher(img2, stop_at=self.stop_at)
+            preds = self.predict(img1, actions, stop_at=self.stop_at)
+            loss = F.mse_loss(preds, targets)
+        return loss

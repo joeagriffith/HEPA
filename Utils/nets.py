@@ -57,25 +57,7 @@ class mnist_cnn_encoder(nn.Module):
 class mnist_cnn_decoder(nn.Module):
     def __init__(self, num_features):
         super().__init__()
-        # self.dec_blocks = nn.ModuleList([
-        #     DecBlock(num_features, 256, 3, 1, 0),
-        #     DecBlock(256, 128, 3, 1, 0),
-        #     DecBlock(128, 64, 3, 1, 0),
-        #     DecBlock(64, 32, 3, 1, 1, upsample=True),
-        #     DecBlock(32, 1, 3, 1, 1, upsample=True),
-        # ])
-
-    # def forward(self, z, stop_at=None):
-        # z = z.view(-1, 256, 1, 1)
-        # for i, block in enumerate(self.dec_blocks):
-        #     if stop_at is not None and i == len(self.dec_blocks) - stop_at:
-        #         break
-        #     z = block(z)
-        #     if i < len(self.dec_blocks) - 1:
-        #         z = F.relu(z)
-            # else:
-            #     z = F.sigmoid(z)
-        # return z
+        self.num_features = num_features
 
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(num_features, 256, 3, 1),
@@ -93,7 +75,7 @@ class mnist_cnn_decoder(nn.Module):
         )
 
     def forward(self, z):
-        z = z.view(-1, 256, 1, 1)
+        z = z.view(-1, self.num_features, 1, 1)
         return self.decoder(z)
 
 

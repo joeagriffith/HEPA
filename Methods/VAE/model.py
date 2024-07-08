@@ -1,10 +1,16 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
 from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
 
+def vae_loss(recon_x, x, mu, logVar, beta=1.0):
+    reconstruction_loss = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
+    mse = F.mse_loss(F.sigmoid(recon_x), x) * x.shape[0]
+    kl_loss = -0.5 * torch.sum(1 + logVar - mu.pow(2) - logVar.exp())
+    return reconstruction_loss + beta * kl_loss, mse
 
 class VAE(nn.Module):
     def __init__(self, in_features, z_dim, backbone='mnist_cnn'):
@@ -77,3 +83,12 @@ class VAE(nn.Module):
         h = self.z2h(z)
         x_hat = self.decoder(h) 
         return x_hat, mu, logVar
+
+    def train_step(self, img1, img2, actions, teacher, epoch):
+        assert img2 is None, 'img2 should be None for VAE.train_step()'
+        assert teacher is None, 'teacher should be None for VAE.train_step()'
+        assert actions is None, 'actions should be None for VAE.train_step()'
+        with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
+            x_hat, mu, logVar = self.reconstruct(img1)
+            loss = vae_loss(x_hat, img1, mu, logVar)
+        return loss

@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as F_v2
+import torchvision.transforms as transforms
 import math
 
 def NTXent(z:torch.Tensor, temperature:float=0.5):
@@ -84,7 +85,7 @@ def get_optimiser(model, optimiser, lr, wd, exclude_bias=True, exclude_bn=True, 
 def cosine_schedule(base, end, T):
     return end - (end - base) * ((torch.arange(0, T, 1) * math.pi / T).cos() + 1) / 2
 
-def augment(images, p):    
+def aug_interact(images, p):    
     # Sample Action
     act_p = torch.rand(5) # whether to apply each augmentation
     angle = torch.rand(1).item() * 360 - 180 if act_p[0] < p else 0
@@ -96,6 +97,14 @@ def augment(images, p):
     action = torch.tensor([angle/180, translate_x/8, translate_y/8, (scale-1.0)/0.25, shear/25], dtype=torch.float32, device=images.device).unsqueeze(0).repeat(images.shape[0], 1)
 
     return images_aug, action
+
+def aug_transform(images, *_):
+    t = transforms.Compose([
+        transforms.RandomCrop(20),
+        transforms.Resize(28, interpolation=transforms.InterpolationMode.NEAREST),
+        transforms.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.75, 1.25), shear=25),
+    ])
+    return t(images), None
 
 def feature_correlation(x):
     # x: (N, C)
@@ -118,3 +127,50 @@ def feature_std(x):
     x = F.normalize(x, dim=1)
     return x.std(dim=0, keepdim=True).mean()
 
+def create_sine_cosine_embeddings(height, width, channels):
+    """
+    Create sine-cosine positional embeddings for the given dimensions.
+    
+    Args:
+        height (int): Height of the embedding grid.
+        width (int): Width of the embedding grid.
+        channels (int): Number of channels for the embeddings.
+        
+    Returns:
+        torch.Tensor: Sine-cosine positional embeddings.
+    """
+    assert channels % 4 == 0, "Channels must be divisible by 4 for sine-cosine embeddings."
+    
+    quarter_dim = channels // 4
+    emb_h = torch.arange(height, dtype=torch.float32)
+    emb_w = torch.arange(width, dtype=torch.float32)
+    
+    emb_h = emb_h.unsqueeze(1) / (10000 ** (torch.arange(quarter_dim, dtype=torch.float32) / quarter_dim))
+    emb_w = emb_w.unsqueeze(1) / (10000 ** (torch.arange(quarter_dim, dtype=torch.float32) / quarter_dim))
+    
+    emb_h = torch.cat((torch.sin(emb_h), torch.cos(emb_h)), dim=1)
+    emb_w = torch.cat((torch.sin(emb_w), torch.cos(emb_w)), dim=1)
+    
+    emb_h = emb_h.unsqueeze(1).repeat(1, width, 1)
+    emb_w = emb_w.unsqueeze(0).repeat(height, 1, 1)
+    
+    embeddings = torch.cat((emb_h, emb_w), dim=2).view(height * width, -1).contiguous()
+    
+    return embeddings
+
+def random_masking(input, ratio):
+    B, N, C = input.shape
+    len_keep = int(N * (1 - ratio))
+
+    noise = torch.rand(B, N, device=input.device)  # noise in [0, 1]
+    ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+    ids_restore = torch.argsort(ids_shuffle, dim=1)
+
+    ids_keep = ids_shuffle[:, :len_keep]
+    input_masked = torch.gather(input, dim=1, index=ids_keep.unsqueeze(-1).expand(-1, -1, C))
+
+    mask = torch.ones(B, N, device=input.device)
+    mask[:, :len_keep] = 0
+    mask = torch.gather(mask, dim=1, index=ids_restore)
+
+    return input_masked, mask, ids_restore

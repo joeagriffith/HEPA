@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
 from Utils.nets import mnist_cnn_encoder
@@ -71,3 +72,22 @@ class BYOL(nn.Module):
         model = BYOL(self.in_features, backbone=self.backbone).to(next(self.parameters()).device)
         model.load_state_dict(self.state_dict())
         return model
+
+    def train_step(self, img1, img2, actions, teacher, epoch):
+        assert actions is None, 'actions should be None for AE.train_step()'
+        with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
+            with torch.no_grad():
+                y1_t, y2_t = teacher(img1), teacher(img2)
+                z1_t, z2_t = teacher.project(y1_t), teacher.project(y2_t)
+                z1_t, z2_t = F.normalize(z1_t, dim=-1), F.normalize(z2_t, dim=-1)
+
+            y1_o, y2_o = self(img1), self(img2)
+            z1_o, z2_o = self.project(y1_o), self.project(y2_o)
+            p1_o, p2_o = self.predict(z1_o), self.predict(z2_o)
+            p1_o, p2_o = F.normalize(p1_o, dim=-1), F.normalize(p2_o, dim=-1)
+
+            loss = 0.5 * (F.mse_loss(p1_o, z2_t) + F.mse_loss(p2_o, z1_t))
+
+        return loss
+
+
