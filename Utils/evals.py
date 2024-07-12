@@ -8,11 +8,14 @@ from Utils.dataset import PreloadedDataset
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from Examples.ModelNet10.dataset import ModelNet10
+from Examples.ModelNet10.dataset import ModelNet10, ModelNet10Simple
+from Examples.MNIST.dataset import MNIST
 from Utils.functional import feature_correlation, feature_std
+
 
 def linear_probing(
     model: nn.Module,
+    dataset: str,
     root: str,
     n_per_class: int,
     writer: SummaryWriter = None,
@@ -24,12 +27,23 @@ def linear_probing(
 
     # Create classifier and specify training parameters
     classifier = nn.Sequential(
-        nn.BatchNorm1d(model.num_features, affine=False),
+        # nn.BatchNorm1d(model.num_features, affine=False),
         nn.Linear(model.num_features, 10, bias=False),
     ).to(device)
     batch_size = max(n_per_class, 10)
     num_epochs = 100
     lr = 0.01
+
+    if dataset == 'mnist':
+        train = MNIST(root=root, split='train', n=n_per_class, device=device)
+        val = MNIST(root=root, split='val', device=device)
+
+    elif dataset == 'modelnet10':
+        train = ModelNet10Simple(root=root, split='train', n=n_per_class, device=device)
+        val = ModelNet10Simple(root=root, split='val', n=55, device=device)
+
+    train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val, batch_size=1000, shuffle=False)
 
     if finetune:
         encoder = model.copy()
@@ -60,28 +74,31 @@ def linear_probing(
     last_val_acc = torch.tensor(-1, device=device)
     best_val_acc = torch.tensor(-1, device=device)
 
-    train_set = ModelNet10(root, 'train', n=n_per_class, device=device)
-    val_set = ModelNet10(root, 'val', n=55, device=device)
-
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
-
     postfix = {}
     for epoch in range(num_epochs):
+        classifier.train()
+        if finetune:
+            encoder.train()
+
         loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
         loop.set_description(f'Epoch [{epoch}/{num_epochs}]')
         if epoch > 0:
             loop.set_postfix(postfix)
         epoch_train_loss = torch.zeros(len(train_loader), device=device)
         epoch_train_acc = torch.zeros(len(train_loader), device=device)
-        for i, ((x, _, y), _) in loop:
+        for i, (x, y) in loop:
+            x = x.to(device)
+            y = y.to(device)
             if flatten:
                 x = x.flatten(1)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 z = encoder(x)
                 y_pred = classifier(z)
                 loss = F.cross_entropy(y_pred, y)
-            optimiser.zero_grad(set_to_none=True)
+            
+            classifier.zero_grad(set_to_none=True)
+            if finetune:
+                optimiser.zero_grad(set_to_none=True)
             loss.backward()
             optimiser.step()
 
@@ -92,9 +109,15 @@ def linear_probing(
         last_train_acc = epoch_train_acc.mean()
         
         with torch.no_grad():
+            classifier.eval()
+            if finetune:
+                encoder.eval()
+
             epoch_val_loss = torch.zeros(len(val_loader), device=device)
             epoch_val_acc = torch.zeros(len(val_loader), device=device)
-            for i, ((x, _, y), _) in enumerate(val_loader):
+            for i, (x, y) in enumerate(val_loader):
+                x = x.to(device)
+                y = y.to(device)
                 if flatten:
                     x = x.flatten(1)
                 with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -137,9 +160,9 @@ def linear_probing(
 
         test_accs = torch.zeros(len(test_loader), device=device)
         with torch.no_grad():
-            for i, ((x, _, y), _) in enumerate(test_loader):
-                x.to(device)
-                y.to(device)
+            for i, (x, y) in enumerate(test_loader):
+                x = x.to(device)
+                y = y.to(device)
                 if flatten:
                     x = x.flatten(1)
                 with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -157,7 +180,8 @@ def linear_probing(
 
     print(f'Best validation accuracy: {best_val_acc.item()}')
 
-def single_step_classification_eval(
+
+def one_step_linear_probing(
         encoder,
         train_loader,
         val_loader,
@@ -172,9 +196,9 @@ def single_step_classification_eval(
     ).to(device)
     optimiser = torch.optim.AdamW(classifier.parameters(), lr=1e-1, weight_decay=0.0)
 
-    for i, ((x, _, y), _) in enumerate(train_loader):
-        x.to(device)
-        y.to(device)
+    for i, (x, y) in enumerate(train_loader):
+        x = x.to(device)
+        y = y.to(device)
         if flatten:
             x = x.flatten(1)
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -190,10 +214,11 @@ def single_step_classification_eval(
 
     val_accs = torch.zeros(len(val_loader), device=device)
     val_losses = torch.zeros(len(val_loader), device=device)
+    classifier.eval()
     with torch.no_grad():
-        for i, ((x, _, y), _) in enumerate(val_loader):
-            x.to(device)
-            y.to(device)
+        for i, (x, y) in enumerate(val_loader):
+            x = x.to(device)
+            y = y.to(device)
             if flatten:
                 x = x.flatten(1)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -208,9 +233,11 @@ def single_step_classification_eval(
 
     return val_acc, val_loss
 
+
 def get_rep_metrics(
     model: nn.Module,
     dataset: PreloadedDataset,
+    dataset_type: str,
     flatten: bool = False,
     corr: bool = True,
     std: bool = True,
@@ -220,8 +247,15 @@ def get_rep_metrics(
 
     embeddings = torch.empty(len(dataset), model.num_features, device=device)
     with torch.no_grad():
-        for i, ((x, _, _), _) in enumerate(loader):
-            x.to(device)
+        # for i, ((x, _, _), _) in enumerate(loader):
+        loop = enumerate(loader)
+        for i in range(len(loader)):
+            if dataset_type == 'modelnet10':
+                _, ((x, _, _), _) = next(loop)
+            else:
+                _, (x, _) = next(loop)
+
+            x = x.to(device)
             if flatten:
                 x = x.flatten(1)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -236,17 +270,23 @@ def get_rep_metrics(
 
     return metrics
 
+
 def eval_representations(
     model: nn.Module,
+    root: str,
+    dataset: str,
     flatten: bool = False,
     writer: SummaryWriter = None,
 ):
     device = next(model.parameters()).device
 
-    root = '../Datasets/ModelNet10'
-    test = ModelNet10(root, 'test', device=device)
+    if dataset == 'mnist':
+        test = MNIST(root, 'test', transform=transforms.ToTensor(), device=device)
+    elif dataset == 'modelnet10':
+        test = ModelNet10Simple(root, 'test', device=device)
 
-    metrics = get_rep_metrics(model, test, flatten=flatten, corr=True, std=True)
+    # dataset type is mnist for both as get() returns (x,y)
+    metrics = get_rep_metrics(model, test, dataset_type='mnist', flatten=flatten, corr=True, std=True)
     
     if writer is not None:
         for key, value in metrics.items():

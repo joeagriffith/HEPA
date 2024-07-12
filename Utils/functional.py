@@ -113,7 +113,7 @@ def feature_correlation(x):
     std = x.std(dim=0, keepdim=True)
     x = (x - mean) / (std + 1e-8)
     # Compute correlation
-    corr = torch.matmul(x.T, x) / x.size(0)
+    corr = torch.matmul(x.T, x) / (x.size(0)-1)
     # select above diagonal
     corr = torch.triu(corr, diagonal=1)
     corr = corr[corr != 0]
@@ -158,19 +158,10 @@ def create_sine_cosine_embeddings(height, width, channels):
     
     return embeddings
 
-def random_masking(input, ratio):
-    B, N, C = input.shape
-    len_keep = int(N * (1 - ratio))
-
-    noise = torch.rand(B, N, device=input.device)  # noise in [0, 1]
-    ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-    ids_restore = torch.argsort(ids_shuffle, dim=1)
-
-    ids_keep = ids_shuffle[:, :len_keep]
-    input_masked = torch.gather(input, dim=1, index=ids_keep.unsqueeze(-1).expand(-1, -1, C))
-
-    mask = torch.ones(B, N, device=input.device)
-    mask[:, :len_keep] = 0
-    mask = torch.gather(mask, dim=1, index=ids_restore)
-
-    return input_masked, mask, ids_restore
+def repeat_interleave_batch(x, B, repeat):
+    N = len(x) // B
+    x = torch.cat([
+        torch.cat([x[i*B:(i+1)*B] for _ in range(repeat)], dim=0)
+        for i in range(N)
+    ], dim=0)
+    return x

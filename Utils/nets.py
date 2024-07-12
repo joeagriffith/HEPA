@@ -184,7 +184,33 @@ class mnist_vit(VisionTransformer):
         else:
             return x[:, 1:]
 
-    
+class Decoder224(nn.Module):
+    def __init__(self, num_features):
+        super().__init__()
+        self.num_features = num_features
 
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(num_features, 256, 5, 1),
+            nn.ReLU(),
 
-    
+            nn.ConvTranspose2d(256, 128, 4, 4),
+            nn.ReLU(),
+            
+            nn.ConvTranspose2d(128, 128, 4, 4),
+            nn.ReLU(),
+            
+            nn.ConvTranspose2d(128, 64, 3, 3),
+            nn.ReLU(),
+
+            nn.Conv2d(64, 64, 7, 1, 0),
+            nn.ReLU(),
+
+            nn.Conv2d(64, 64, 7, 1, 0),
+            nn.ReLU(),
+
+            nn.Conv2d(64, 1, 5, 1, 0),
+        )
+
+    def forward(self, z):
+        z = z.view(-1, self.num_features, 1, 1)
+        return self.decoder(z)

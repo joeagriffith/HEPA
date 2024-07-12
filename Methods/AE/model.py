@@ -4,10 +4,10 @@ import torch.nn.functional as F
 
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder, Decoder224
 
 class AE(nn.Module):
-    def __init__(self, in_features, backbone='mnist_cnn'):
+    def __init__(self, in_features, backbone='mnist_cnn', decoder='mnist'):
         super().__init__()
         self.in_features = in_features
         self.backbone = backbone
@@ -30,8 +30,7 @@ class AE(nn.Module):
         elif backbone == 'resnet18':
             self.encoder = resnet18()
             self.encoder.conv1 = nn.Conv2d(in_features, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-            self.encoder.maxpool = nn.Identity()
-            self.encoder.fc = nn.Flatten() # Actually performs better without this line
+            self.encoder.fc = nn.Identity()
             self.num_features = 512
 
         elif backbone == 'alexnet':
@@ -61,7 +60,7 @@ class AE(nn.Module):
         # No BN, makes it worse
         self.decoder = nn.Sequential(
             self.pre_decode,
-            mnist_cnn_decoder(self.num_features),
+            mnist_cnn_decoder(self.num_features) if decoder == 'mnist' else Decoder224(self.num_features),
         )
     
     def forward(self, x):
@@ -80,5 +79,5 @@ class AE(nn.Module):
 
         with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
             preds = self.reconstruct(img1)
-            loss = F.mse_loss(preds, img1)
+            loss = F.mse_loss(preds, img1, reduction='none').sum(dim=-1).mean()
         return loss

@@ -1,15 +1,18 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
-from Utils.nets import mnist_cnn_encoder
+from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
 
-class BYOL(nn.Module):
-    def __init__(self, in_features, backbone='mnist_cnn'):
+class iGPA(nn.Module):
+    def __init__(self, in_features, num_actions, stop_at=0, backbone='mnist_cnn'):
         super().__init__()
         self.in_features = in_features
+        self.num_actions = num_actions
         self.backbone = backbone
+        self.stop_at = stop_at # where to perform prediction, 0 = observation space, -1 = latent space
 
         # MNIST ONLY
         if backbone == 'vit':
@@ -25,69 +28,76 @@ class BYOL(nn.Module):
             self.encoder.conv_proj = nn.Conv2d(1, 256, kernel_size=7, stride=7)
             self.encoder.heads = nn.Identity()
             self.num_features = 256
+
         elif backbone == 'resnet18':
             self.encoder = resnet18()
             self.encoder.conv1 = nn.Conv2d(in_features, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
             self.encoder.maxpool = nn.Identity()
             self.encoder.fc = nn.Linear(512, 256)
             self.num_features = 256
+
         elif backbone == 'alexnet':
             self.encoder = alexnet()
             self.encoder.features[0] = nn.Conv2d(in_features, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
             self.encoder.avgpool = nn.AdaptiveAvgPool2d((1, 1))
             self.encoder.classifier = nn.Flatten()
             self.num_features = 256
+
         elif backbone == 'mnist_cnn':
             self.num_features = 256
             self.encoder = mnist_cnn_encoder(self.num_features)
-
-        self.project = nn.Sequential(
-            nn.Linear(self.num_features, 1024, bias=False),
-            nn.BatchNorm1d(1024),
+    
+        self.action_encoder = nn.Sequential(
+            nn.Linear(num_actions, 128),
             nn.ReLU(),
-            nn.Linear(1024, 256, bias=False),
-            # nn.Linear(self.num_features, 1024, bias=False),
-            # nn.ReLU(),
-            # nn.Linear(1024, 512, bias=False),
-            # nn.ReLU(),
-            # nn.Linear(512, self.num_features, bias=False)
+            nn.Linear(128, 128),
+            nn.ReLU(),
         )
 
-        self.predict = nn.Sequential(
-            nn.Linear(256, 512, bias=False),
-            nn.BatchNorm1d(512),
+        # NO BATCHNORM
+        self.transition = nn.Sequential(
+            nn.Linear(self.num_features + 128, 1024),
             nn.ReLU(),
-            nn.Linear(512, 256, bias=False),
-            # nn.Linear(self.num_features, 1024, bias=False),
-            # nn.ReLU(),
-            # nn.Linear(1024, 512, bias=False),
-            # nn.ReLU(),
-            # nn.Linear(512, self.num_features, bias=False)
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, self.num_features)
         )
 
-    def forward(self, x):
-        return self.encoder(x)
+        #for Mnist (-1, 1, 28, 28)
+        self.decoder = mnist_cnn_decoder(self.num_features)
+
+    def forward(self, x, stop_at=-1):
+        if stop_at == 0:
+            return x
+        elif stop_at == -1:
+            return self.encoder(x)
+        else:
+            raise NotImplementedError(f'stop_at={stop_at} not implemented')
+    
+    def predict(self, x, a=None, stop_at=None):
+        if a is None:
+            a = torch.zeros(x.shape[0], self.num_actions, device=x.device)
+        
+        z = self.encoder(x)
+        a = self.action_encoder(a)
+        z_pred = self.transition(torch.cat([z, a], dim=1))
+        if stop_at == -1:
+            pred = z_pred
+        elif stop_at == 0:
+            pred = self.decoder(z_pred)
+        else:
+            raise NotImplementedError(f'stop_at={stop_at} not implemented')
+        return pred
     
     def copy(self):
-        model = BYOL(self.in_features, backbone=self.backbone).to(next(self.parameters()).device)
+        model = iGPA(self.in_features, self.num_actions, self.backbone).to(next(self.parameters()).device)
         model.load_state_dict(self.state_dict())
         return model
 
     def train_step(self, img1, img2, actions, teacher, epoch):
-        assert actions is None, 'actions should be None for AE.train_step()'
         with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
             with torch.no_grad():
-                y1_t, y2_t = teacher(img1), teacher(img2)
-                z1_t, z2_t = teacher.project(y1_t), teacher.project(y2_t)
-                z1_t, z2_t = F.normalize(z1_t, dim=-1), F.normalize(z2_t, dim=-1)
-
-            y1_o, y2_o = self(img1), self(img2)
-            z1_o, z2_o = self.project(y1_o), self.project(y2_o)
-            p1_o, p2_o = self.predict(z1_o), self.predict(z2_o)
-            p1_o, p2_o = F.normalize(p1_o, dim=-1), F.normalize(p2_o, dim=-1)
-
-            loss = 0.5 * (F.mse_loss(p1_o, z2_t, reduction='none').sum(-1).mean() + F.mse_loss(p2_o, z1_t, reduction='none').sum(-1).mean())
-
+                targets = teacher(img2, stop_at=self.stop_at)
+            preds = self.predict(img1, actions, stop_at=self.stop_at)
+            loss = F.mse_loss(preds, targets, reduction='none').sum(dim=-1).mean()
         return loss
-
-

@@ -4,7 +4,8 @@ import torch.nn.functional as F
 from torchvision.models.vision_transformer import EncoderBlock
 
 from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
-from Utils.functional import create_sine_cosine_embeddings, random_masking
+from Utils.functional import create_sine_cosine_embeddings
+from Utils.masking import random_masking
 
 from typing import Callable
 from functools import partial
