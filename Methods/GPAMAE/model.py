@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision.models.vision_transformer import EncoderBlock
 
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.nn.nets import mnist_cnn_encoder, mnist_cnn_decoder
 from Utils.functional import create_sine_cosine_embeddings
 from Utils.masking import random_masking
 

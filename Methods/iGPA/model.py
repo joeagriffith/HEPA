@@ -2,22 +2,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torchvision.models import resnet18, alexnet
+from torchvision.models import alexnet
 from rvit import RegisteredVisionTransformer
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.nn.nets import mnist_cnn_encoder, mnist_cnn_decoder, Decoder128, Decoder224
+from Utils.nn.parts import TransformerEncoderBottleneck
+from Utils.nn.resnet_encoder import resnet18
 
 class iGPA(nn.Module):
-    def __init__(self, in_features, num_actions, stop_at=0, backbone='mnist_cnn'):
+    def __init__(self, in_features, num_actions, stop_at=0, backbone='mnist_cnn', resolution=28):
         super().__init__()
         self.in_features = in_features
         self.num_actions = num_actions
-        self.backbone = backbone
         self.stop_at = stop_at # where to perform prediction, 0 = observation space, -1 = latent space
+        self.backbone = backbone
+        self.resolution = resolution
 
         # MNIST ONLY
         if backbone == 'vit':
             self.encoder = RegisteredVisionTransformer(
-                image_size=28,
+                image_size=resolution,
                 patch_size=7,
                 num_layers=6,
                 num_heads=4,
@@ -30,11 +33,8 @@ class iGPA(nn.Module):
             self.num_features = 256
 
         elif backbone == 'resnet18':
-            self.encoder = resnet18()
-            self.encoder.conv1 = nn.Conv2d(in_features, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-            self.encoder.maxpool = nn.Identity()
-            self.encoder.fc = nn.Linear(512, 256)
-            self.num_features = 256
+            self.encoder = resnet18((in_features, resolution, resolution))
+            self.num_features = 512
 
         elif backbone == 'alexnet':
             self.encoder = alexnet()
@@ -64,7 +64,12 @@ class iGPA(nn.Module):
         )
 
         #for Mnist (-1, 1, 28, 28)
-        self.decoder = mnist_cnn_decoder(self.num_features)
+        if resolution == 28:
+            self.decoder = mnist_cnn_decoder(self.num_features)
+        elif resolution == 128:
+            self.decoder = Decoder128(in_features, self.num_features)
+        elif resolution == 224:
+            self.decoder = Decoder224(self.num_features)
 
     def forward(self, x, stop_at=-1):
         if stop_at == 0:
@@ -77,6 +82,8 @@ class iGPA(nn.Module):
     def predict(self, x, a=None, stop_at=None):
         if a is None:
             a = torch.zeros(x.shape[0], self.num_actions, device=x.device)
+        else:
+            a = torch.zeros_like(a)
         
         z = self.encoder(x)
         a = self.action_encoder(a)
@@ -90,7 +97,7 @@ class iGPA(nn.Module):
         return pred
     
     def copy(self):
-        model = iGPA(self.in_features, self.num_actions, self.backbone).to(next(self.parameters()).device)
+        model = iGPA(self.in_features, self.num_actions, self.stop_at, self.backbone, self.resolution).to(next(self.parameters()).device)
         model.load_state_dict(self.state_dict())
         return model
 
@@ -99,5 +106,5 @@ class iGPA(nn.Module):
             with torch.no_grad():
                 targets = teacher(img2, stop_at=self.stop_at)
             preds = self.predict(img1, actions, stop_at=self.stop_at)
-            loss = F.mse_loss(preds, targets, reduction='none').sum(dim=-1).mean()
+            loss = F.mse_loss(preds, targets)
         return loss

@@ -1,0 +1,25 @@
+cfgs:
+
+  - dataset: modelnet10
+    experiment: testing
+    trial: BYOL
+    model_type: BYOL
+    save: True
+    num_epochs: 2
+    warmup: 0
+
+  - dataset: modelnet10
+    experiment: testing
+    trial: iGPA
+    model_type: iGPA
+    save: True
+    num_epochs: 2
+    warmup: 0
+
+  - dataset: modelnet10
+    experiment: testing
+    trial: AE
+    model_type: AE
+    save: True
+    num_epochs: 2
+    warmup: 0

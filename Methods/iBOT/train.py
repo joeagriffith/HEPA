@@ -232,7 +232,7 @@ def train(
         if writer is not None:
             writer.add_scalar('Encoder/train_loss', last_train_loss, epoch)
             writer.add_scalar('Encoder/val_loss', last_val_loss, epoch)
-            writer.add_scalar('Encoder/1step_val_acc', ss_val_acc, epoch)
+            writer.add_scalar('Encoder/1step_val_accuracy', ss_val_acc, epoch)
             writer.add_scalar('Encoder/1step_val_loss', ss_val_loss, epoch)
 
         if ss_val_loss < best_val_loss and save_dir is not None and epoch % save_every == 0:

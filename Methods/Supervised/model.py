@@ -3,13 +3,12 @@ import torch.nn as nn
 
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.nn.nets import mnist_cnn_encoder, mnist_cnn_decoder
 
 class Supervised(nn.Module):
-    def __init__(self, in_features, num_actions, backbone='mnist_cnn'):
+    def __init__(self, in_features, backbone='mnist_cnn', resolution=28):
         super().__init__()
         self.in_features = in_features
-        self.num_actions = num_actions
         self.backbone = backbone
 
         # MNIST ONLY

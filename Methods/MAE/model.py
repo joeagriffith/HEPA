@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models.vision_transformer import EncoderBlock
 
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.nn.nets import mnist_cnn_encoder, mnist_cnn_decoder
 from Utils.functional import create_sine_cosine_embeddings
 from Utils.masking import random_masking
 
@@ -173,10 +173,10 @@ class MNISTDecoder(nn.Module):
         return x
 
 class MAE(nn.Module):
-    def __init__(self, in_features, learnable_pos_embeddings=True):
+    def __init__(self, in_features, resolution:int):
         super().__init__()
         self.in_features = in_features
-        self.learnable_pos_embeddings = learnable_pos_embeddings
+        self.learnable_pos_embeddings = False
         self.backbone = 'custom'
         self.num_features = 256
 
@@ -190,7 +190,7 @@ class MAE(nn.Module):
             attention_dropout=0.1,
             num_registers=4,
             norm_layer=nn.LayerNorm,
-            learnable_pos_embeddings=learnable_pos_embeddings
+            learnable_pos_embeddings=False
         )
 
         self.decoder = MNISTDecoder(
@@ -203,14 +203,12 @@ class MAE(nn.Module):
             attention_dropout=0.1,
             num_registers=4,
             norm_layer=nn.LayerNorm,
-            learnable_pos_embeddings=learnable_pos_embeddings
+            learnable_pos_embeddings=False
         )
-
 
     def forward(self, x):
         z, _ = self.encoder(x, mask_ratio=0.0)
         return z.mean(1)
-            
     
     def reconstruct(self, x, mask_ratio, mask_output=False):
         z, mask = self.encoder(x, mask_ratio=mask_ratio)

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from torchvision.models import resnet18, alexnet
 from rvit import RegisteredVisionTransformer
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.nn.nets import mnist_cnn_encoder, mnist_cnn_decoder, Decoder128, Decoder224
 
 def vae_loss(recon_x, x, mu, logVar, beta=1.0):
     reconstruction_loss = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
@@ -13,7 +13,7 @@ def vae_loss(recon_x, x, mu, logVar, beta=1.0):
     return reconstruction_loss + beta * kl_loss, mse
 
 class VAE(nn.Module):
-    def __init__(self, in_features, z_dim, backbone='mnist_cnn'):
+    def __init__(self, in_features, z_dim, backbone='mnist_cnn', resolution=28):
         super().__init__()
         self.in_features = in_features
         self.backbone = backbone
@@ -60,12 +60,17 @@ class VAE(nn.Module):
             nn.ReLU(),
             nn.Linear(1024, 512),
             nn.ReLU(),
-            nn.Linear(512, self.h_dim)
+            nn.Linear(512, self.num_features)
         )
         # self.z2h = nn.Linear(z_dim, self.h_dim)
 
         #for Mnist (-1, 1, 28, 28)
-        self.decoder = mnist_cnn_decoder(self.h_dim)
+        if resolution == 28:
+            self.decoder = mnist_cnn_decoder(self.num_features)
+        elif resolution == 128:
+            self.decoder = Decoder128(self.num_features)
+        elif resolution == 224:
+            self.decoder = Decoder224(self.num_features)
 
     def forward(self, x):
         h = self.encoder(x)
@@ -90,5 +95,5 @@ class VAE(nn.Module):
         assert actions is None, 'actions should be None for VAE.train_step()'
         with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
             x_hat, mu, logVar = self.reconstruct(img1)
-            loss = vae_loss(x_hat, img1, mu, logVar)
+            loss = vae_loss(x_hat, img1, mu, logVar)[0]
         return loss

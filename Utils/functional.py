@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as F_v2
 import torchvision.transforms as transforms
+from scipy.spatial.transform import Rotation as R
+import numpy as np
 import math
 
 def NTXent(z:torch.Tensor, temperature:float=0.5):
@@ -56,32 +58,6 @@ def negative_cosine_similarity(x1:torch.Tensor, x2:torch.Tensor):
     x2 = F.normalize(x2, dim=-1)
     return -torch.matmul(x1, x2.T).sum(dim=-1).mean()
 
-
-def get_optimiser(model, optimiser, lr, wd, exclude_bias=True, exclude_bn=True, momentum=0.9, betas=(0.9, 0.999)):
-    non_decay_parameters = []
-    decay_parameters = []   
-    for n, p in model.named_parameters():
-        if exclude_bias and 'bias' in n:
-            non_decay_parameters.append(p)
-        elif exclude_bn and 'bn' in n:
-            non_decay_parameters.append(p)
-        else:
-            decay_parameters.append(p)
-    non_decay_parameters = [{'params': non_decay_parameters, 'weight_decay': 0.0}]
-    decay_parameters = [{'params': decay_parameters}]
-
-    assert optimiser in ['AdamW', 'SGD'], 'optimiser must be one of ["AdamW", "SGD"]'
-    if optimiser == 'AdamW':
-        if momentum != 0.9:
-            print('Warning: AdamW does not accept momentum parameter. Ignoring it. Please specify betas instead.')
-        optimiser = torch.optim.AdamW(decay_parameters + non_decay_parameters, lr=lr, weight_decay=wd, betas=betas)
-    elif optimiser == 'SGD':
-        if betas != (0.9, 0.999):
-            print('Warning: SGD does not accept betas parameter. Ignoring it. Please specify momentum instead.')
-        optimiser = torch.optim.SGD(decay_parameters + non_decay_parameters, lr=lr, weight_decay=wd, momentum=momentum)
-    
-    return optimiser
-
 def cosine_schedule(base, end, T):
     return end - (end - base) * ((torch.arange(0, T, 1) * math.pi / T).cos() + 1) / 2
 
@@ -99,9 +75,12 @@ def aug_interact(images, p):
     return images_aug, action
 
 def aug_transform(images, *_):
+    B, C, H, W = images.shape
+
+    new_H = int(H*0.71)
     t = transforms.Compose([
-        transforms.RandomCrop(20),
-        transforms.Resize(28, interpolation=transforms.InterpolationMode.NEAREST),
+        transforms.RandomCrop(new_H),
+        transforms.Resize(H, interpolation=transforms.InterpolationMode.NEAREST),
         transforms.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.75, 1.25), shear=25),
     ])
     return t(images), None
@@ -165,3 +144,37 @@ def repeat_interleave_batch(x, B, repeat):
         for i in range(N)
     ], dim=0)
     return x
+
+def euler_to_quaternion(euler):
+    return R.from_euler('xyz', euler, degrees=True).as_quat()
+
+def quaternion_delta(euler_from, euler_to):
+    quat1 = euler_to_quaternion(euler_from)
+    quat2 = euler_to_quaternion(euler_to)
+
+    delta_quat = R.from_quat(quat2) * R.from_quat(quat1).inv()
+    return torch.tensor(delta_quat.as_quat(), dtype=torch.float32, device=euler_from.device)
+
+def delta_axis_angle(euler_from, euler_to):
+    rot1 = R.from_euler('xyz', euler_from, degrees=True)
+    rot2 = R.from_euler('xyz', euler_to, degrees=True)
+
+    delta_rot = rot2 * rot1.inv()
+
+    delta_axis_angle = delta_rot.as_rotvec()
+
+    return delta_axis_angle
+
+def axis_angle(euler_from, euler_to):
+
+    del_axis_angle = delta_axis_angle(euler_from, euler_to)
+
+    angle = np.linalg.norm(del_axis_angle, axis=1)
+    axis = del_axis_angle / angle[:, None]
+
+    angle = torch.tensor(angle, dtype=torch.float32, device=euler_from.device).unsqueeze(1)
+    axis = torch.tensor(axis, dtype=torch.float32, device=euler_from.device)
+
+    out = torch.cat([axis, angle], dim=1)
+
+    return out

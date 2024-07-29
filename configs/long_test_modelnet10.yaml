@@ -1,0 +1,64 @@
+cfgs:
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: BYOL
+    model_type: BYOL
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: iGPA
+    model_type: iGPA
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: AE
+    model_type: AE
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: BYOL
+    model_type: BYOL
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: iGPA
+    model_type: iGPA
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: AE
+    model_type: AE
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: BYOL
+    model_type: BYOL
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: iGPA
+    model_type: iGPA
+    save: True
+    num_epochs: 100
+
+  - dataset: modelnet10
+    experiment: long_testing
+    trial: AE
+    model_type: AE
+    save: True
+    num_epochs: 100

@@ -3,9 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models.vision_transformer import EncoderBlock
 
-from Utils.nets import mnist_cnn_encoder, mnist_cnn_decoder
-from Utils.functional import create_sine_cosine_embeddings, repeat_interleave_batch
+from Utils.nn.nets import mnist_cnn_encoder, mnist_cnn_decoder
+from Utils.functional import repeat_interleave_batch
 from Utils.masking import random_masking, MaskGenerator, apply_masks
+from Utils.pos_embed import get_2d_sincos_pos_embed
 
 from typing import Callable
 from functools import partial
@@ -28,7 +29,6 @@ class MNISTEncoder(nn.Module):
         dropout: float,
         attention_dropout: float,
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
-        learnable_pos_embeddings: bool = True,
     ):
         assert hidden_dim % num_heads == 0, "hidden_dim must be divisible by num_heads"
         super().__init__()
@@ -37,17 +37,15 @@ class MNISTEncoder(nn.Module):
 
         self.embed_patches = nn.Conv2d(in_features, hidden_dim, kernel_size=7, stride=7, bias=False)
         
-        if learnable_pos_embeddings:
-            num_patches = patched_shape[0] * patched_shape[1]
-            self.pos_embedding = nn.Parameter(torch.randn(num_patches, hidden_dim) * 0.02)
-        else:
-            self.pos_embedding = create_sine_cosine_embeddings(patched_shape[0], patched_shape[1], hidden_dim)
+        num_patches = patched_shape[0] * patched_shape[1]
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_dim), requires_grad=False)
+        pos_embedding = get_2d_sincos_pos_embed(hidden_dim, patched_shape[0], cls_token=False)
+        self.pos_embed.data.copy_(torch.from_numpy(pos_embedding).float().unsqueeze(0))
 
         # initialise registers
         self.num_registers = num_registers
         self.registers = nn.Parameter(torch.empty(1, num_registers, hidden_dim).normal_(std=0.02)) # copied pos_embedding init. (not optimised)
-
-        self.mask_token = nn.Parameter(torch.randn(1, 1, hidden_dim))
+        self.mask_token = nn.Parameter(torch.empty(1, 1, hidden_dim).normal_(std=0.02))
 
         self.dropout = nn.Dropout(dropout)
         layers: OrderedDict[str, nn.Module] = OrderedDict()
@@ -69,6 +67,20 @@ class MNISTEncoder(nn.Module):
         patches = patches.flatten(2).transpose(1, 2)
         return patches
 
+    def interpolate_pos_encoding(self, x, pos_embed):
+        npatch = x.shape[1]
+        N = pos_embed.shape[1]
+        if npatch == N:
+            return pos_embed
+        dim = x.shape[-1]
+        pos_embed = nn.functional.interpolate(
+            pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
+            scale_factor=math.sqrt(npatch / N),
+            mode='bicubic',
+        )
+        pos_embed = pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return pos_embed
+
     def forward(self, x: torch.Tensor, enc_masks=None):
         torch._assert(x.dim() == 4, f"Expected (batch_size, seq_length, hidden_dim) got {x.shape}")
 
@@ -76,9 +88,11 @@ class MNISTEncoder(nn.Module):
         B, N, D = x.shape
 
         # add pos_embeddings
-        x = x + self.pos_embedding
+        pos_embed = self.interpolate_pos_embedding(x, self.pos_embedding)
+        x = x + pos_embed
 
-        x = apply_masks(x, enc_masks)
+        if enc_masks is not None:
+            x = apply_masks(x, enc_masks)
 
         # add registers to input
         x = torch.cat([x, self.registers.expand(x.size(0), -1, -1)], dim=1)
@@ -90,12 +104,7 @@ class MNISTEncoder(nn.Module):
         if self.num_registers > 0:
             x = x[:, :-self.num_registers, :]
         
-        # reintroduce mask tokens
-        x = torch.cat([x, self.mask_token.expand(B, N-x.size(1), -1)], dim=1)
-        # reorder
-        x = torch.gather(x, dim=1, index=ids_restore.unsqueeze(-1).expand(-1, -1, C))
-
-        return x, mask
+        return x
 
 
 class MNISTPredictor(nn.Module):
@@ -113,7 +122,6 @@ class MNISTPredictor(nn.Module):
         dropout: float,
         attention_dropout: float,
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
-        learnable_pos_embeddings: bool = True
     ):
         super().__init__()
         # Note that batch_size is on the first dim because
@@ -121,11 +129,10 @@ class MNISTPredictor(nn.Module):
         self.predictor_embed = nn.Linear(embed_dim, pred_embed_dim, bias=True)
         self.mask_token = nn.Parameter(torch.randn(1, 1, pred_embed_dim))
 
-        if learnable_pos_embeddings:
-            num_patches = patched_shape[0] * patched_shape[1]
-            self.pos_embedding = nn.Parameter(torch.randn(1, num_patches, pred_embed_dim) * 0.02)
-        else:
-            self.pos_embedding = create_sine_cosine_embeddings(patched_shape[0], patched_shape[1], pred_embed_dim).unsqueeze(0)
+        num_patches = patched_shape[0] * patched_shape[1]
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim), requires_grad=False)
+        pos_embedding = get_2d_sincos_pos_embed(pred_embed_dim, patched_shape[0], cls_token=False)
+        self.pos_embed.data.copy_(torch.from_numpy(pos_embedding).float().unsqueeze(0))
         
         # initialise registers
         self.num_registers = num_registers
@@ -254,7 +261,6 @@ class iJEPA(nn.Module):
         def forward_target():
             with torch.no_grad():
                 h = teacher(img1)
-                h = F.layer_norm(h, (h.size(-1),))
                 B = len(h)
                 h = apply_masks(h, pred_masks)
                 h = repeat_interleave_batch(h, B, repeat=len(enc_masks))

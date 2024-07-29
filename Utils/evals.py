@@ -15,15 +15,12 @@ from Utils.functional import feature_correlation, feature_std
 
 def linear_probing(
     model: nn.Module,
-    dataset: str,
-    root: str,
+    writer: SummaryWriter,
     n_per_class: int,
-    writer: SummaryWriter = None,
-    flatten: bool = False,
-    test: bool = False,
+    cfg: dict,
     finetune: bool = False,
 ):
-    device = next(model.parameters()).device
+    device = torch.device(cfg['device'])
 
     # Create classifier and specify training parameters
     classifier = nn.Sequential(
@@ -34,13 +31,13 @@ def linear_probing(
     num_epochs = 100
     lr = 0.01
 
-    if dataset == 'mnist':
-        train = MNIST(root=root, split='train', n=n_per_class, device=device)
-        val = MNIST(root=root, split='val', device=device)
+    if cfg['dataset'] == 'mnist':
+        train = MNIST(root=cfg['root'], split='train', n=n_per_class, device=device)
+        val = MNIST(root=cfg['root'], split='val', device=device)
 
-    elif dataset == 'modelnet10':
-        train = ModelNet10Simple(root=root, split='train', n=n_per_class, device=device)
-        val = ModelNet10Simple(root=root, split='val', n=55, device=device)
+    elif cfg['dataset'] == 'modelnet10':
+        train = ModelNet10Simple(root=cfg['root'], split='train', n=n_per_class, device=device, resolution=cfg['resolution'])
+        val = ModelNet10Simple(root=cfg['root'], split='val', n=10, device=device, resolution=cfg['resolution'])
 
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val, batch_size=1000, shuffle=False)
@@ -89,8 +86,6 @@ def linear_probing(
         for i, (x, y) in loop:
             x = x.to(device)
             y = y.to(device)
-            if flatten:
-                x = x.flatten(1)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 z = encoder(x)
                 y_pred = classifier(z)
@@ -118,8 +113,6 @@ def linear_probing(
             for i, (x, y) in enumerate(val_loader):
                 x = x.to(device)
                 y = y.to(device)
-                if flatten:
-                    x = x.flatten(1)
                 with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                     z = encoder(x)
                     y_pred = classifier(z)
@@ -134,58 +127,53 @@ def linear_probing(
         
         if writer is not None:
             if finetune:
-                writer.add_scalar('Classifier/ft_train_loss', last_train_loss.item(), epoch)
-                writer.add_scalar('Classifier/ft_train_acc', last_train_acc.item(), epoch)
-                writer.add_scalar('Classifier/ft_val_loss', last_val_loss.item(), epoch)
-                writer.add_scalar('Classifier/ft_val_acc', last_val_acc.item(), epoch)
+                writer.add_scalar('train/finetuning_loss', last_train_loss.item(), epoch)
+                writer.add_scalar('train/finetuning_accuracy', last_train_acc.item(), epoch)
+                writer.add_scalar('val/finetuning_loss', last_val_loss.item(), epoch)
+                writer.add_scalar('val/finetuning_accuracy', last_val_acc.item(), epoch)
             else:
-                writer.add_scalar('Classifier/train_loss', last_train_loss.item(), epoch)
-                writer.add_scalar('Classifier/train_acc', last_train_acc.item(), epoch)
-                writer.add_scalar('Classifier/val_loss', last_val_loss.item(), epoch)
-                writer.add_scalar('Classifier/val_acc', last_val_acc.item(), epoch)
+                writer.add_scalar('train/loss', last_train_loss.item(), epoch)
+                writer.add_scalar('train/accuracy', last_train_acc.item(), epoch)
+                writer.add_scalar('val/loss', last_val_loss.item(), epoch)
+                writer.add_scalar('val/accuracy', last_val_acc.item(), epoch)
         
         postfix = {
             'train_loss': last_train_loss.item(),
-            'train_acc': last_train_acc.item(),
+            'train_accuracy': last_train_acc.item(),
             'val_loss': last_val_loss.item(),
-            'val_acc': last_val_acc.item(),
+            'val_accuracy': last_val_acc.item(),
         }
         loop.set_postfix(postfix)
         loop.close()
 
-    if test:
+    if cfg['dataset'] == 'mnist':
         t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)
-        test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device)
-        test_loader = DataLoader(test, batch_size=100, shuffle=False)
+    elif cfg['dataset'] == 'modelnet10':
+        t_dataset = ModelNet10Simple(root=cfg['root'], split='test', device=device, resolution=cfg['resolution'])
+    test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device)
+    test_loader = DataLoader(test, batch_size=100, shuffle=False)
 
-        test_accs = torch.zeros(len(test_loader), device=device)
-        with torch.no_grad():
-            for i, (x, y) in enumerate(test_loader):
-                x = x.to(device)
-                y = y.to(device)
-                if flatten:
-                    x = x.flatten(1)
-                with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
-                    z = encoder(x)
-                    y_pred = classifier(z)
-                test_accs[i] = (y_pred.argmax(dim=1) == y).float().mean()
+    test_accs = torch.zeros(len(test_loader), device=device)
+    with torch.no_grad():
+        for i, (x, y) in enumerate(test_loader):
+            x = x.to(device)
+            y = y.to(device)
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+                z = encoder(x)
+                y_pred = classifier(z)
+            test_accs[i] = (y_pred.argmax(dim=1) == y).float().mean()
 
-        test_acc = test_accs.mean().item()
-        print(f'Test accuracy: {test_acc}')
-        if writer is not None:
-            if finetune:
-                writer.add_scalar('Classifier/ft_test_acc', test_acc)
-            else:
-                writer.add_scalar('Classifier/test_acc', test_acc)
-
-    print(f'Best validation accuracy: {best_val_acc.item()}')
-
+    test_acc = test_accs.mean().item()
+    if writer is not None:
+        if finetune:
+            writer.add_scalar('test/finetuning_accuracy', test_acc)
+        else:
+            writer.add_scalar('test/accuracy', test_acc)
 
 def one_step_linear_probing(
         encoder,
         train_loader,
         val_loader,
-        flatten=False,
 ):
     encoder.eval()
     device = next(encoder.parameters()).device
@@ -199,8 +187,6 @@ def one_step_linear_probing(
     for i, (x, y) in enumerate(train_loader):
         x = x.to(device)
         y = y.to(device)
-        if flatten:
-            x = x.flatten(1)
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
             with torch.no_grad():
                 z = encoder(x)
@@ -219,8 +205,6 @@ def one_step_linear_probing(
         for i, (x, y) in enumerate(val_loader):
             x = x.to(device)
             y = y.to(device)
-            if flatten:
-                x = x.flatten(1)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 with torch.no_grad():
                     z = encoder(x)        
@@ -237,10 +221,7 @@ def one_step_linear_probing(
 def get_rep_metrics(
     model: nn.Module,
     dataset: PreloadedDataset,
-    dataset_type: str,
-    flatten: bool = False,
-    corr: bool = True,
-    std: bool = True,
+    cfg: dict,
 ):
     device = next(model.parameters()).device
     loader = DataLoader(dataset, batch_size=100, shuffle=False)
@@ -250,22 +231,24 @@ def get_rep_metrics(
         # for i, ((x, _, _), _) in enumerate(loader):
         loop = enumerate(loader)
         for i in range(len(loader)):
-            if dataset_type == 'modelnet10':
-                _, ((x, _, _), _) = next(loop)
+            if cfg['dataset'] == 'modelnet10':
+                try:
+                    _, ((x, _, _), _) = next(loop)
+                except Exception as e:
+                    print(f"An error occurred: {e}. Using default value instead.")
+                    _, (x, _) = next(loop)
             else:
                 _, (x, _) = next(loop)
 
             x = x.to(device)
-            if flatten:
-                x = x.flatten(1)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 z = model(x)
             embeddings[i * 100:(i + 1) * 100] = z
 
     metrics = {}
-    if corr:
+    if cfg['track_feature_corrs']:
         metrics['corr'] = feature_correlation(embeddings).item()
-    if std:
+    if cfg['track_feature_stds']:
         metrics['std'] = feature_std(embeddings).item()
 
     return metrics
@@ -273,23 +256,16 @@ def get_rep_metrics(
 
 def eval_representations(
     model: nn.Module,
-    root: str,
-    dataset: str,
-    flatten: bool = False,
-    writer: SummaryWriter = None,
+    cfg: dict
 ):
-    device = next(model.parameters()).device
+    device = torch.device(cfg['device'])
 
-    if dataset == 'mnist':
-        test = MNIST(root, 'test', transform=transforms.ToTensor(), device=device)
-    elif dataset == 'modelnet10':
-        test = ModelNet10Simple(root, 'test', device=device)
+    if cfg['dataset'] == 'mnist':
+        test = MNIST(cfg['root'], 'test', transform=transforms.ToTensor(), device=device)
+    elif cfg['dataset'] == 'modelnet10':
+        test = ModelNet10(cfg['root'], 'test', device=device, resolution=cfg['resolution'])
 
     # dataset type is mnist for both as get() returns (x,y)
-    metrics = get_rep_metrics(model, test, dataset_type='mnist', flatten=flatten, corr=True, std=True)
-    
-    if writer is not None:
-        for key, value in metrics.items():
-            writer.add_scalar(f'Encoder/test-{key}', value)
+    metrics = get_rep_metrics(model, test, cfg)
     
     return metrics

@@ -1,12 +1,10 @@
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from tqdm import tqdm
-from Utils.functional import cosine_schedule
+from Utils.functional import cosine_schedule, aug_interact, aug_transform
 from Utils.evals import one_step_linear_probing, eval_representations, get_rep_metrics
-from Examples.MNIST.dataset import MNIST
-from Examples.ModelNet10.dataset import ModelNet10Simple
+from Utils.functional import quaternion_delta, axis_angle
+from Utils.utils import get_ss_datasets
 
 import os
 
@@ -15,84 +13,78 @@ def train(
         optimiser,
         train_dataset,
         val_dataset,
-        num_epochs,
-        batch_size,
-        dataset,
-        has_teacher=False,
-        aug_mode='none',
-        augment=None,
-        writer=None,
-        save_dir=None,
-        save_every=1,
-        root='../Datasets/',
+        # num_epochs,
+        # batch_size,
+        # start_lr,
+        # end_lr,
+        # start_wd,
+        # end_wd,
+        # dataset,
+        # has_teacher=False,
+        # aug_mode='none',
+        # augment=None,
+        writer,
+        # save_dir=None,
+        # save_every=1,
+        # resolution=224,
+        # root='../Datasets/',
+        # decay_lr=True,
+        # warmup=10,
+        # flat=0,
+        cfg:dict,
 ):
 
-    device = next(model.parameters()).device
-    assert aug_mode in ['none', 'augment', 'sample']
-    if aug_mode == 'augment':
-        assert augment is not None, 'augment must be provided if aug_mode is "augment"'
-    elif aug_mode == 'sample':
-        assert augment is None, 'augment must be None if aug_mode is "sample"'
-    assert dataset in ['mnist', 'modelnet10'], 'dataset must be one of ["mnist", "modelnet10"]'
+    device = torch.device(cfg['device'])
+
+    if cfg['transformation_fn'] == 'interact':
+        transform = aug_interact
+    elif cfg['transformation_fn'] == 'perturb':
+        transform = aug_transform
+    else:
+        assert cfg['transformation_fn'] is None, 'transformation function must be "interact", "perturb" or None'
+
+    assert cfg['aug_mode'] in ['none', 'transform', 'sample']
+    if cfg['aug_mode'] == 'transform':
+        assert cfg['transformation_fn'] is not None, 'transformation must be provided if aug_mode is "transform"'
+    assert cfg['dataset'] in ['mnist', 'modelnet10'], 'dataset must be one of ["mnist", "modelnet10"]'
 
 #============================== Online Model Learning Parameters ==============================
     # LR schedule, warmup then cosine
-    base_lr = optimiser.param_groups[0]['lr'] * batch_size / 256
-    end_lr = 1e-6
-    warm_up_lrs = torch.linspace(0, base_lr, 11)[1:]
-    if num_epochs > 10:
-        cosine_lrs = cosine_schedule(base_lr, end_lr, num_epochs-10)
+    assert cfg['warmup'] + cfg['flat'] <= cfg['num_epochs'], f'warmup must be less than or equal to num_epochs, got {cfg["warmup"]} and {cfg["num_epochs"]}'
+    start_lr = cfg['start_lr'] * cfg['batch_size'] / 256
+    end_lr = cfg['end_lr'] * cfg['batch_size'] / 256
+    warm_up_lrs = torch.linspace(0, start_lr, cfg['warmup']+1)[1:]
+    if cfg['num_epochs'] > cfg['warmup']+cfg['flat']:
+        if cfg['decay_lr']:
+            cosine_lrs = cosine_schedule(start_lr, end_lr, cfg['num_epochs']-cfg['warmup']-cfg['flat'])
+        else:
+            cosine_lrs = torch.ones(cfg['num_epochs']-cfg['warmup']-cfg['flat']) * start_lr
         lrs = torch.cat([warm_up_lrs, cosine_lrs])
-    else:
-        lrs = warm_up_lrs[:num_epochs]
-    assert len(lrs) == num_epochs
+    if cfg['flat'] > 0:
+        lrs = torch.cat([lrs, torch.ones(cfg['flat']) * cfg['end_lr']])
+    assert len(lrs) == cfg['num_epochs']
 
     # WD schedule, cosine 
-    start_wd = 0.04
-    end_wd = 0.4
-    wds = cosine_schedule(start_wd, end_wd, num_epochs)
+    wds = cosine_schedule(cfg['start_wd'], cfg['end_wd'], cfg['num_epochs'])
 
 #============================== Target Model Learning Parameters ==============================
-    if has_teacher:
+    if cfg['has_teacher']:
         # Initialise target model
         teacher = model.copy()
         # EMA schedule, cosine
-        start_tau=0.996
-        end_tau = 1.0
-        taus = cosine_schedule(start_tau, end_tau, num_epochs)
+        taus = cosine_schedule(cfg['start_tau'], cfg['end_tau'], cfg['num_epochs'])
     else:
         teacher = None
 
 # ============================== Data Handling ==============================
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=cfg['batch_size'], shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=cfg['batch_size'], shuffle=False)
 
-    if dataset == 'mnist':
-        ss_train_dataset = MNIST(root=root, split='train', n=1, transform=transforms.ToTensor(), device=device)
-        ss_val_dataset = MNIST(root=root, split='val', transform=transforms.ToTensor(), device=device)
-    elif dataset == 'modelnet10':
-        ss_train_dataset = ModelNet10Simple(root=root, split='train', n=10, transform=None, device=device)
-        ss_val_dataset = ModelNet10Simple(root=root, split='val', n=10, transform=None, device=device)
-    else:
-        raise ValueError(f'Dataset {dataset} not implemented')
-    ss_train_loader = DataLoader(ss_train_dataset, batch_size=batch_size, shuffle=True)
+    ss_train_dataset, ss_val_dataset = get_ss_datasets(cfg)
+    ss_train_loader = DataLoader(ss_train_dataset, batch_size=cfg['batch_size'], shuffle=True)
     ss_val_loader = DataLoader(ss_val_dataset, batch_size=1000, shuffle=False)
 
 # ============================== Training Stuff ==============================
-
-    train_options = {
-        'num_epochs': num_epochs,
-        'batch_size': batch_size,
-        'has_teacher': has_teacher,
-        'train_transform': str(train_dataset.transform),
-        'val_transform': str(val_dataset.transform),
-    }
-
-    # Log training options, model details, and optimiser details
-    if writer is not None:
-        writer.add_text('Encoder/options', str(train_options))
-        writer.add_text('Encoder/model', str(model).replace('\n', '<br/>').replace(' ', '&nbsp;'))
-        writer.add_text('Encoder/optimiser', str(optimiser).replace('\n', '<br/>').replace(' ', '&nbsp;'))
 
     # Initialise training variables
     last_train_loss = -1
@@ -100,19 +92,14 @@ def train(
     best_val_loss = float('inf')
     postfix = {}
 
-    if save_dir is not None:# and not os.path.exists(save_dir):
-        parent_dir = save_dir.rsplit('/', 1)[0]
-        if not os.path.exists(parent_dir):
-            os.makedirs(parent_dir)
-
 # ============================== Training Loop ==============================
-    for epoch in range(num_epochs):
+    for epoch in range(cfg['num_epochs']):
         model.train()
         if teacher:
             teacher.train()
-        train_dataset.apply_transform(batch_size=batch_size)
+        train_dataset.apply_transform(batch_size=cfg['batch_size'])
         loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
-        loop.set_description(f'Epoch [{epoch}/{num_epochs}]')
+        loop.set_description(f'Epoch [{epoch}/{cfg["num_epochs"]}]')
         if epoch > 0:
             loop.set_postfix(postfix)
 
@@ -127,36 +114,51 @@ def train(
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
         for i, data in loop:
+
+            images2 = None
             actions = None
-            if dataset == 'mnist':
+            if cfg['dataset'] == 'mnist':
                 images1, _ = data
-            elif dataset == 'modelnet10':
+            elif cfg['dataset'] == 'modelnet10':
                 (images1, rot1, _), (images2, rot2, _) = data
                 actions = (rot2 - rot1) / 360.0
+                # actions = quaternion_delta(rot1, rot2)
+                # actions = axis_angle(rot1, rot2)
             else:
-                raise NotImplementedError(f'Dataset {dataset} not implemented')
+                raise NotImplementedError(f'Dataset {cfg["dataset"]} not implemented')
 
-            if train_dataset.device.type != device.type:
-                images1 = images1.to(device)
+            if train_dataset.device.type != cfg['device']:
+                images1 = images1.to(cfg['device'])
                 if images2 is not None:
-                    images2 = images2.to(device)
+                    images2 = images2.to(cfg['device'])
                 if actions is not None:
-                    actions = actions.to(device)
+                    actions = actions.to(cfg['device'])
 
-            if aug_mode == 'augment':
-                images2, actions = augment(images1, 0.25)
-            elif aug_mode == 'sample':
-                assert dataset == 'modelnet10', 'sample mode only implemented for modelnet10'
+            if cfg['aug_mode'] == 'transform':
+                images2, actions = transform(images1, 0.25)
+            elif cfg['aug_mode'] == 'sample':
+                assert cfg['dataset'] == 'modelnet10', 'sample mode only implemented for modelnet10'
             else:
                 images2 = None
                 actions = None
 
+            # check devices
+            assert images1.device.type == cfg['device'], f'images1 device is {images1.device}, expected {cfg["device"]}'
+            if images2 is not None:
+                assert images2.device.type == cfg['device'], f'images2 device is {images2.device}, expected {cfg["device"]}'
+            if actions is not None:
+                assert actions.device.type == cfg['device'], f'actions device is {actions.device}, expected {cfg["device"]}'
+            assert next(model.parameters()).device.type == cfg['device'], f'model device is {next(model.parameters()).device}, expected {cfg["device"]}'
+        
             loss = model.train_step(images1, images2, actions, teacher, epoch)
+        
             loss.backward()
+
             optimiser.step()
+
             optimiser.zero_grad(set_to_none=True)
 
-            if has_teacher:
+            if cfg['has_teacher']:
                 # Update target model
                 with torch.no_grad():
                     for o_param, t_param in zip(model.parameters(), teacher.parameters()):
@@ -166,17 +168,20 @@ def train(
 
         # Validation Pass
         model.eval()
-        if has_teacher:
+        if cfg['has_teacher']:
             teacher.eval()
         with torch.no_grad():
             epoch_val_losses = torch.zeros(len(val_loader), device=device)
             for i, data in enumerate(val_loader):
+                images2 = None
                 actions = None
-                if dataset == 'mnist':
+                if cfg['dataset'] == 'mnist':
                     images1, _ = data
-                elif dataset == 'modelnet10':
+                elif cfg['dataset'] == 'modelnet10':
                     (images1, rot1, _), (images2, rot2, _) = data
                     actions = (rot2 - rot1) / 360.0
+                    # actions = quaternion_delta(rot1, rot2)
+                    # actions = axis_angle(rot1, rot2)
 
                 if val_dataset.device.type != device.type:
                     images1 = images1.to(device)
@@ -185,22 +190,26 @@ def train(
                     if actions is not None:
                         actions = actions.to(device)
 
-                if aug_mode == 'augment':
-                    images2, actions = augment(images1, 0.25)
-                elif aug_mode == 'sample':
-                    assert dataset == 'modelnet10', 'sample mode only implemented for modelnet10'
+                if cfg['aug_mode'] == 'transform':
+                    images2, actions = transform(images1, 0.25)
+                elif cfg['aug_mode'] == 'sample':
+                    assert cfg['dataset'] == 'modelnet10', 'sample mode only implemented for modelnet10'
                 else:
                     images2 = None
+                    actions = None
+
+                if cfg['model_type'] == 'iGPA' and not cfg['consider_actions']:
                     actions = None
 
                 loss = model.train_step(images1, images2, actions, teacher, epoch)
                 epoch_val_losses[i] = loss.detach()
 
+
         # evaluate representations
         if writer is not None:
-            rep_metrics = get_rep_metrics(model, val_dataset, dataset)
-            writer.add_scalar('Encoder/feature_corr', rep_metrics['corr'], epoch)
-            writer.add_scalar('Encoder/feature_std', rep_metrics['std'], epoch)
+            rep_metrics = get_rep_metrics(model, val_dataset, cfg)
+            writer.add_scalar('val/feature_corr', rep_metrics['corr'], epoch)
+            writer.add_scalar('val/feature_std', rep_metrics['std'], epoch)
         
         # single step linear classification eval
         ss_val_acc, ss_val_loss = one_step_linear_probing(model, ss_train_loader, ss_val_loader)
@@ -209,16 +218,16 @@ def train(
         last_val_loss = epoch_val_losses.mean().item()
         postfix = {'train_loss': last_train_loss, 'val_loss': last_val_loss}
         if writer is not None:
-            writer.add_scalar('Encoder/train_loss', last_train_loss, epoch)
-            writer.add_scalar('Encoder/val_loss', last_val_loss, epoch)
-            writer.add_scalar('Encoder/1step_val_acc', ss_val_acc, epoch)
-            writer.add_scalar('Encoder/1step_val_loss', ss_val_loss, epoch)
+            writer.add_scalar('train/loss', last_train_loss, epoch)
+            writer.add_scalar('val/loss', last_val_loss, epoch)
+            writer.add_scalar('val/1step_accuracy', ss_val_acc, epoch)
+            writer.add_scalar('val/1step_loss', ss_val_loss, epoch)
 
-        if ss_val_loss < best_val_loss and save_dir is not None and epoch % save_every == 0:
+        if ss_val_loss < best_val_loss and cfg['save'] and epoch % cfg['save_every'] == 0:
             best_val_loss = ss_val_loss
-            torch.save(model.state_dict(), save_dir)
+            torch.save(model.state_dict(), cfg['save_dir'])
 
-    rep_metrics = eval_representations(model, root, dataset, writer=writer)
+    rep_metrics = eval_representations(model, cfg)
     if writer is not None:
-        writer.add_scalar('Encoder/test_feature_corr', rep_metrics['corr'], epoch)
-        writer.add_scalar('Encoder/test_feature_std', rep_metrics['std'], epoch)
+        writer.add_scalar('test/feature_corr', rep_metrics['corr'], epoch)
+        writer.add_scalar('test/feature_std', rep_metrics['std'], epoch)
