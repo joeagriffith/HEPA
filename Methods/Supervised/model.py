@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 
 from torchvision.models import resnet18, alexnet
-from rvit import RegisteredVisionTransformer
 from Utils.nn.nets import mnist_cnn_encoder, mnist_cnn_decoder
 
 class Supervised(nn.Module):
@@ -11,22 +10,22 @@ class Supervised(nn.Module):
         self.in_features = in_features
         self.backbone = backbone
 
-        # MNIST ONLY
-        if backbone == 'vit':
-            self.encoder = RegisteredVisionTransformer(
-                image_size=28,
-                patch_size=7,
-                num_layers=6,
-                num_heads=4,
-                hidden_dim=256,
-                num_registers=4,
-                mlp_dim=1024,
-            )
-            self.encoder.conv_proj = nn.Conv2d(1, 256, kernel_size=7, stride=7)
-            self.encoder.heads = nn.Identity()
-            self.num_features = 256
+        # # MNIST ONLY
+        # if backbone == 'vit':
+        #     self.encoder = RegisteredVisionTransformer(
+        #         image_size=28,
+        #         patch_size=7,
+        #         num_layers=6,
+        #         num_heads=4,
+        #         hidden_dim=256,
+        #         num_registers=4,
+        #         mlp_dim=1024,
+        #     )
+        #     self.encoder.conv_proj = nn.Conv2d(1, 256, kernel_size=7, stride=7)
+        #     self.encoder.heads = nn.Identity()
+        #     self.num_features = 256
 
-        elif backbone == 'resnet18':
+        if backbone == 'resnet18':
             self.encoder = resnet18()
             self.encoder.conv1 = nn.Conv2d(in_features, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
             self.encoder.maxpool = nn.Identity()

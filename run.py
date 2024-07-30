@@ -65,6 +65,9 @@ if __name__ == '__main__':
     
 
     for (cfg, specified_cfg) in cfgs:
+        if cfg['hpc']:
+            cfg['root'] = '$HOME/Datasets/'
+
         assert cfg['device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
 
         torch.manual_seed(cfg['seed'])

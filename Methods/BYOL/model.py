@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import alexnet
-from rvit import RegisteredVisionTransformer
 from Utils.nn.nets import mnist_cnn_encoder
 from Utils.nn.resnet_encoder import resnet18
 
@@ -13,21 +12,22 @@ class BYOL(nn.Module):
         self.backbone = backbone
         self.resolution = resolution
 
-        # MNIST ONLY
-        if backbone == 'vit':
-            self.encoder = RegisteredVisionTransformer(
-                image_size=28,
-                patch_size=7,
-                num_layers=6,
-                num_heads=4,
-                hidden_dim=256,
-                num_registers=4,
-                mlp_dim=1024,
-            )
-            self.encoder.conv_proj = nn.Conv2d(1, 256, kernel_size=7, stride=7)
-            self.encoder.heads = nn.Identity()
-            self.num_features = 256
-        elif backbone == 'resnet18':
+        # # MNIST ONLY
+        # if backbone == 'vit':
+        #     self.encoder = RegisteredVisionTransformer(
+        #         image_size=28,
+        #         patch_size=7,
+        #         num_layers=6,
+        #         num_heads=4,
+        #         hidden_dim=256,
+        #         num_registers=4,
+        #         mlp_dim=1024,
+        #     )
+        #     self.encoder.conv_proj = nn.Conv2d(1, 256, kernel_size=7, stride=7)
+        #     self.encoder.heads = nn.Identity()
+        #     self.num_features = 256
+
+        if backbone == 'resnet18':
             self.encoder = resnet18((in_features, resolution, resolution))
             self.num_features = 512
 

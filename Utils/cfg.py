@@ -16,8 +16,8 @@ def mnist_cfg(
     enforce_cfg = {
         'dataset': 'mnist',
         'root': '../Datasets/',
-        'log_dir': 'Examples/MNIST/out/logs/',
-        'save_dir': 'Examples/MNIST/out/models/',
+        'log_dir': 'out/MNIST/logs/',
+        'save_dir': 'out/MNIST/models/',
         'batch_size': 256,
         'in_features': 1,
         'backbone': 'mnist_cnn',
@@ -54,8 +54,8 @@ def modelnet10_cfg(
     enforce_cfg = {
         'dataset': 'modelnet10',
         'root': '../Datasets/',
-        'log_dir': 'Examples/ModelNet10/out/logs/',
-        'save_dir': 'Examples/ModelNet10/out/models/',
+        'log_dir': 'out/ModelNet10/logs/',
+        'save_dir': 'out/ModelNet10/models/',
         'batch_size': 128,
         'in_features': 1,
         'backbone': 'resnet18',
@@ -97,6 +97,7 @@ def base_cfg(
         'device': 'cuda',
         'use_compile': False,
         'seed': 42,
+        'hpc': False,
 
         'dataset': dataset,
         'dataset_dtype': 'float32',
