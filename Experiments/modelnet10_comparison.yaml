@@ -1,0 +1,106 @@
+cfgs:
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: True
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: True
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: AE
+    model_type: AE
+    save: True
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: AE
+    model_type: AE
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: AE
+    model_type: AE
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: AE
+    model_type: AE
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: AE
+    model_type: AE
+    save: False
+    num_epochs: 500

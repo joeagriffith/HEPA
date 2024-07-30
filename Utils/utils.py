@@ -104,7 +104,7 @@ def get_datasets(cfg):
         val_set = PreloadedDataset.from_dataset(val_set, None, device)
     
     elif cfg['dataset'] == 'modelnet10':
-        train_set = ModelNet10(cfg['root'], 'train', device=torch.device('cpu'), resolution=cfg['resolution'])
+        train_set = ModelNet10(cfg, 'train')
         train_set, val_set = train_set.split_set(cfg['train_ratio'])
 
     return train_set, val_set
@@ -116,8 +116,8 @@ def get_ss_datasets(cfg):
         ss_train_dataset = MNIST(root=cfg['root'], split='train', n=1, transform=transforms.ToTensor(), device=device)
         ss_val_dataset = MNIST(root=cfg['root'], split='val', transform=transforms.ToTensor(), device=device)
     elif cfg['dataset'] == 'modelnet10':
-        ss_train_dataset = ModelNet10Simple(root=cfg['root'], split='train', n=10, transform=None, device=device, resolution=cfg['resolution'])
-        ss_val_dataset = ModelNet10Simple(root=cfg['root'], split='val', n=10, transform=None, device=device, resolution=cfg['resolution'])
+        ss_train_dataset = ModelNet10Simple(cfg, split='train', n=10, transform=None)
+        ss_val_dataset = ModelNet10Simple(cfg, split='val', n=10, transform=None)
     else:
         raise ValueError(f'Dataset {cfg["dataset"]} not implemented')
     

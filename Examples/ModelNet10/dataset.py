@@ -9,20 +9,21 @@ import time
 
 
 class ModelNet10(torch.utils.data.Dataset):
-    def __init__(self, root, split, n=None, transform=None, device=torch.device('cpu'), resolution=224):
+    def __init__(self, cfg, split, n=None, transform=None):
         assert split in ['train', 'val', 'test']
         if split == 'val':
             assert n is not None, 'n must be specified for val split, or use .split_set()'
-        self.device = device
-        self.root = root
+        self.device = cfg['device']
+        self.root = cfg['root']
         file_split = 'train' if split == 'val' else split
         self.split = split
-        self.classes = os.listdir(root + 'ModelNet10/' + file_split)
+        self.classes = os.listdir(self.root + 'ModelNet10/' + file_split)
         self.class_n = {}
         self.transform = transform
-        self.resolution = resolution
+        self.resolution = cfg['resolution']
+        self.dataset_dtype = cfg['dataset_dtype']
         for c in self.classes:
-            self.class_n[c] = len(os.listdir(root + 'ModelNet10/' + file_split + '/' + c))
+            self.class_n[c] = len(os.listdir(self.root + 'ModelNet10/' + file_split + '/' + c))
         if n is None:
             self.length = sum(self.class_n.values())
         else:
@@ -30,8 +31,8 @@ class ModelNet10(torch.utils.data.Dataset):
 
         self.n = n
 
-        path = root + 'ModelNet10/tensors/' + split + f'_dataset_n{self.n}_{resolution}.pth' if self.n is not None else root + 'ModelNet10/tensors/' + split + f'_dataset_{resolution}.pth'
-        path_224 = root + 'ModelNet10/tensors/' + split + f'_dataset_n{self.n}_{resolution}.pth' if self.n is not None else root + 'ModelNet10/tensors/' + split + f'_dataset_{224}.pth'
+        path = self.root + 'ModelNet10/tensors/' + split + f'_dataset_n{self.n}_{self.resolution}.pth' if self.n is not None else self.root + 'ModelNet10/tensors/' + split + f'_dataset_{self.resolution}.pth'
+        path_224 = self.root + 'ModelNet10/tensors/' + split + f'_dataset_n{self.n}_{self.resolution}.pth' if self.n is not None else self.root + 'ModelNet10/tensors/' + split + f'_dataset_{224}.pth'
         if os.path.exists(path):
             tensors = torch.load(path)
             self.data = tensors['data']
@@ -42,7 +43,7 @@ class ModelNet10(torch.utils.data.Dataset):
             self.data = tensors['data']
             self.rotations = tensors['rotations']
             self.labels = tensors['labels']
-            self.data = torch.nn.functional.interpolate(self.data, size=(1, resolution, resolution))
+            self.data = torch.nn.functional.interpolate(self.data, size=(1, self.resolution, self.resolution))
             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path)
         else:
             print('Building dataset...')
@@ -52,7 +53,7 @@ class ModelNet10(torch.utils.data.Dataset):
             self.labels = torch.empty(self.length, dtype=torch.long)
 
             # load info csv and convert RotX, RotY, RotZ columns to a (n,3) pytorch tensor
-            info = pd.read_csv(root + 'ModelNet10/' + 'train_info.csv')[['RotX', 'RotY', 'RotZ']].values.astype(np.float32)
+            info = pd.read_csv(self.root + 'ModelNet10/' + 'train_info.csv')[['RotX', 'RotY', 'RotZ']].values.astype(np.float32)
             info = torch.Tensor(info)
 
             guid = 0 if split in ['train', 'test'] else (sum(self.class_n.values()) * 64) - 1 # start from end if val split
@@ -60,7 +61,7 @@ class ModelNet10(torch.utils.data.Dataset):
             c_loop = tqdm(enumerate(self.classes), total=len(self.classes)) if split in ['train', 'test'] else tqdm(reversed(list(enumerate(self.classes))), total=len(self.classes))
             for c_i, c in c_loop:
                 num = 0
-                o_loop = os.listdir(root + 'ModelNet10/' + file_split + '/' + c) if split in ['train', 'test'] else reversed(os.listdir(root + 'ModelNet10/' + file_split + '/' + c))
+                o_loop = os.listdir(self.root + 'ModelNet10/' + file_split + '/' + c) if split in ['train', 'test'] else reversed(os.listdir(self.root + 'ModelNet10/' + file_split + '/' + c))
                 for o in o_loop:
                     # enforce 'n' items per class if specified.
                     if n is not None and num >= self.n:
@@ -68,7 +69,7 @@ class ModelNet10(torch.utils.data.Dataset):
                     else:
                         i_loop = range(64) if split in ['train', 'test'] else reversed(range(64))
                         for i in i_loop:
-                            img = Image.open(root + 'ModelNet10/' + file_split + '/' + c + '/' + o + '/' + str(guid) + '.png').convert('RGB')
+                            img = Image.open(self.root + 'ModelNet10/' + file_split + '/' + c + '/' + o + '/' + str(guid) + '.png').convert('RGB')
                             self.data[idx][i] = (transforms.ToTensor()(img)[0]*255.0).to(torch.uint8).unsqueeze(0)
                             self.rotations[idx][i] = info[guid]
                             guid += 1 if split in ['train', 'test'] else -1
@@ -83,28 +84,46 @@ class ModelNet10(torch.utils.data.Dataset):
             
             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path_224)
 
-            if resolution != 224:
-                self.data = torch.nn.functional.interpolate(self.data, size=(1, resolution, resolution))
+            if self.resolution != 224:
+                self.data = torch.nn.functional.interpolate(self.data, size=(1, self.resolution, self.resolution))
 
             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path)
+        
+        # remove data not accessed by process
+        if cfg['ddp']:
+            self.shuffle(cfg['seed'])
+            proc_len = self.length // cfg['ddp_world_size']
+            lo = proc_len * cfg['ddp_rank']
+            hi = proc_len * cfg['ddp_rank'] + proc_len
+            self.data = self.data[lo:hi]
+            self.rotations = self.rotations[lo:hi]
+            self.labels = self.labels[lo:hi]
+            self.length = proc_len
 
-        self.data = self.data.to(device)
-        self.labels = self.labels.to(device)
-        self.rotations = self.rotations.to(device)
+        assert self.dataset_dtype in ['uint8', 'float32'], 'dataset_dtype must be uint8 or float32'
+        if self.dataset_dtype == 'float32':
+            self.data = self.data.to(torch.float32) / 255.0
 
-            
+        self.data = self.data.to(self.device)
+        self.rotations = self.rotations.to(self.device)
+        self.labels = self.labels.to(self.device)
+
     def split_set(self, ratio):
         assert 0 < ratio < 1, 'ratio must be between 0 and 1'
         assert self.n is None, 'n must be None to split dataset'
 
-        # shuffle data
-        idx = torch.randperm(self.length)
-        self.data = self.data[idx]
-        self.labels = self.labels[idx]
-        self.rotations = self.rotations[idx]
+        self.shuffle()
+
+        fake_cfg = {
+            'root': self.root,
+            'device': self.device,
+            'ddp': False,
+            'dataset_dtype': self.dataset_dtype,
+            'resolution': self.resolution,
+        }
 
         # build val dataset
-        val_dataset = ModelNet10(self.root, split='val', device=self.device, n=0)
+        val_dataset = ModelNet10(fake_cfg, split='val', n=0)
         val_dataset.data = self.data[int(self.length * ratio):]
         val_dataset.labels = self.labels[int(self.length * ratio):]
         val_dataset.rotations = self.rotations[int(self.length * ratio):]
@@ -126,8 +145,9 @@ class ModelNet10(torch.utils.data.Dataset):
         idx1 = np.random.randint(64)
         idx2 = np.random.randint(64)
 
-        img1 = self.data[idx][idx1].to(torch.float32) / 255.0
-        img2 = self.data[idx][idx2].to(torch.float32) / 255.0
+        if self.dataset_dtype == 'uint8':
+            img1 = self.data[idx][idx1].to(torch.float32) / 255.0
+            img2 = self.data[idx][idx2].to(torch.float32) / 255.0
 
         if self.transform is not None:
             img1 = self.transform(img1)
@@ -138,7 +158,6 @@ class ModelNet10(torch.utils.data.Dataset):
     
         lab1 = self.labels[idx]
         lab2 = self.labels[idx]
-
 
         return (img1, rot1, lab1), (img2, rot2, lab2)
 
@@ -152,15 +171,23 @@ class ModelNet10(torch.utils.data.Dataset):
     def apply_transform(self, batch_size):
         pass
 
-
+    def shuffle(self, seed=None):
+        if seed is not None:
+            torch.manual_seed(seed)
+        idx = torch.randperm(self.length)
+        self.data = self.data[idx]
+        self.labels = self.labels[idx]
+        self.rotations = self.rotations[idx]
 
 class ModelNet10Simple(ModelNet10):
-    def __init__(self, root, split, n=None, transform=None, device=torch.device('cpu'), resolution=128):
-        super().__init__(root, split, n, transform, device, resolution)
+    def __init__(self, cfg, split, n=None, transform=None):
+        super().__init__(cfg, split, n, transform)
 
     def __getitem__(self, idx):
         idx1 = np.random.randint(64)
-        img = self.data[idx][idx1].to(torch.float32) / 255.0
+
+        if self.dataset_dtype == 'uint8':
+            img = self.data[idx][idx1].to(torch.float32) / 255.0
 
         if self.transform is not None:
             img = self.transform(img)
@@ -168,99 +195,3 @@ class ModelNet10Simple(ModelNet10):
         lab = self.labels[idx]
 
         return img, lab
-
-# class ModelNet10Simple(ModelNet10):
-#     def __init__(self, root, split, device='cpu', n=None, transform=None, resolution=128):
-#         assert split in ['train', 'val', 'test']
-#         if split == 'val':
-#             assert n is not None, 'n must be specified for val split, or use .split_set()'
-#         self.device = device
-#         self.root = root
-#         file_split = 'train' if split == 'val' else split
-#         self.split = split
-#         self.classes = os.listdir(root + 'ModelNet10/' + file_split)
-#         self.class_n = {}
-#         self.resolution = resolution
-#         self.transform = transform
-#         for c in self.classes:
-#             self.class_n[c] = len(os.listdir(root + 'ModelNet10/' + file_split + '/' + c))
-#         if n is None:
-#             self.length = sum(self.class_n.values()) * 64
-#         else:
-#             self.length = n * len(self.classes) * 64
-
-#         self.n = n
-
-#         path = root + 'ModelNet10/tensors/simple_' + split + f'_n{self.n}_{resolution}.pth' if self.n is not None else root + 'ModelNet10/tensors/simple_' + split + f'_{resolution}.pth'
-#         path_224 = root + 'ModelNet10/tensors/simple_' + split + f'_n{self.n}_{224}.pth' if self.n is not None else root + 'ModelNet10/tensors/simple_' + split + f'_{224}.pth'
-#         if os.path.exists(path):
-#             print('Loading data...')
-#             tensors = torch.load(path)
-#             self.data = tensors['data']
-#             self.rotations = tensors['rotations']
-#             self.labels = tensors['labels']
-#         elif os.path.exists(path_224):
-#             print('Loading and interpolating data...')
-#             tensors = torch.load(path_224)
-#             self.data = tensors['data']
-#             self.rotations = tensors['rotations']
-#             self.labels = tensors['labels']
-#             self.data = torch.nn.functional.interpolate(self.data, size=(1, resolution, resolution))
-#             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path)
-#         else:
-#             print('Building dataset...')
-#             print(f'path: {path}')
-
-#             self.data = torch.empty((self.length, 1, 224, 224), dtype=torch.uint8, device=device)
-#             self.rotations = torch.empty((self.length, 3), dtype=torch.float32, device=device)
-#             self.labels = torch.empty(self.length, dtype=torch.long, device=device)
-
-#             # load info csv and convert RotX, RotY, RotZ columns to a (n,3) pytorch tensor
-#             info = pd.read_csv(root + 'ModelNet10/' + 'train_info.csv')[['RotX', 'RotY', 'RotZ']].values.astype(np.float32)
-#             info = torch.Tensor(info).to(device)
-
-#             guid = 0 if split in ['train', 'test'] else (sum(self.class_n.values()) * 64) - 1 # start from end if val split
-#             idx = 0
-#             c_loop = tqdm(enumerate(self.classes), total=len(self.classes)) if split in ['train', 'test'] else tqdm(reversed(list(enumerate(self.classes))), total=len(self.classes))
-#             for c_i, c in c_loop:
-#                 num = 0
-#                 o_loop = os.listdir(root + 'ModelNet10/' + file_split + '/' + c) if split in ['train', 'test'] else reversed(os.listdir(root + 'ModelNet10/' + file_split + '/' + c))
-#                 for o in o_loop:
-#                     # enforce 'n' items per class if specified.
-#                     if n is not None and num >= self.n:
-#                         guid += 64 if split in ['train', 'test'] else -64
-#                     else:
-#                         for _ in range(64):
-#                             img = Image.open(root + 'ModelNet10/' + file_split + '/' + c + '/' + o + '/' + str(guid) + '.png').convert('RGB')
-#                             self.data[idx] = (transforms.ToTensor()(img)[0]*255.0).to(torch.uint8).unsqueeze(0).to(device)
-#                             self.rotations[idx] = info[guid]
-#                             self.labels[idx] = c_i
-
-#                             guid += 1 if split in ['train', 'test'] else -1
-#                             idx += 1
-#                     num += 1
-
-#             if split == 'val':
-#                 self.data = self.data.flip(0, 1)
-#                 self.rotations = self.rotations.flip(0, 1)
-#                 self.labels = self.labels.flip(0)
-
-#             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path_224)
-            
-#             if self.resolution != 224:
-#                 self.data = torch.nn.functional.interpolate(self.data, size=(self.resolution, self.resolution))
-
-#             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path)
-
-#         self.data = self.data.to(device)
-#         self.labels = self.labels.to(device)
-#         self.rotations = self.rotations.to(device)
-    
-#     def __getitem__(self, idx):
-#         img = self.data[idx].to(torch.float32) / 255.0
-#         lab = self.labels[idx]
-
-#         if self.transform is not None:
-#             img = self.transform(img)
-
-#         return img, lab

@@ -39,6 +39,7 @@ def modelnet10_cfg(
         trial:str, 
         model_type:str, 
         resolution:int=128, 
+        dataset_dtype:str='uint8',
         **kwargs
     ):
 
@@ -48,6 +49,7 @@ def modelnet10_cfg(
     specified_cfg['trial'] = trial
     specified_cfg['model_type'] = model_type
     specified_cfg['resolution'] = resolution
+    specified_cfg['dataset_dtype'] = dataset_dtype
 
     enforce_cfg = {
         'dataset': 'modelnet10',
@@ -66,8 +68,11 @@ def modelnet10_cfg(
             assert kwargs[key] == value, f"Specified {key} does not agree with enforced configuration. Must be {value}."
         else:
             kwargs[key] = value
+
+    kwargs['resolution'] = resolution
+    kwargs['dataset_dtype'] = dataset_dtype
     
-    return base_cfg(experiment, trial, model_type, resolution=resolution, **kwargs), specified_cfg
+    return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
 
 #=========================== base cfg initialiser ===========================
 
@@ -90,8 +95,11 @@ def base_cfg(
         'experiment': experiment,
         'trial': trial,
         'device': 'cuda',
+        'use_compile': False,
+        'seed': 42,
 
         'dataset': dataset,
+        'dataset_dtype': 'float32',
         'root': root,
         'log_dir': log_dir,
         'save_dir': save_dir,

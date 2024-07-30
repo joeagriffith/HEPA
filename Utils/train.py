@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
+from torch.distributed import dist
 from tqdm import tqdm
 from Utils.functional import cosine_schedule, aug_interact, aug_transform
 from Utils.evals import one_step_linear_probing, eval_representations, get_rep_metrics
@@ -13,28 +14,11 @@ def train(
         optimiser,
         train_dataset,
         val_dataset,
-        # num_epochs,
-        # batch_size,
-        # start_lr,
-        # end_lr,
-        # start_wd,
-        # end_wd,
-        # dataset,
-        # has_teacher=False,
-        # aug_mode='none',
-        # augment=None,
         writer,
-        # save_dir=None,
-        # save_every=1,
-        # resolution=224,
-        # root='../Datasets/',
-        # decay_lr=True,
-        # warmup=10,
-        # flat=0,
         cfg:dict,
 ):
 
-    device = torch.device(cfg['device'])
+    device = cfg['device'] + ':' + cfg['ddp_rank']
 
     if cfg['transformation_fn'] == 'interact':
         transform = aug_interact
@@ -95,13 +79,11 @@ def train(
 # ============================== Training Loop ==============================
     for epoch in range(cfg['num_epochs']):
         model.train()
+
         if teacher:
             teacher.train()
+
         train_dataset.apply_transform(batch_size=cfg['batch_size'])
-        loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
-        loop.set_description(f'Epoch [{epoch}/{cfg["num_epochs"]}]')
-        if epoch > 0:
-            loop.set_postfix(postfix)
 
         # Update lr
         for param_group in optimiser.param_groups:
@@ -113,6 +95,14 @@ def train(
 
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
+        epoch_train_norms = torch.zeros(len(train_loader), device=device)
+        if cfg['master_process']:
+            loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
+            loop.set_description(f'Epoch [{epoch}/{cfg["num_epochs"]}]')
+            if epoch > 0:
+                loop.set_postfix(postfix)
+        else:
+            loop = enumerate(train_loader)
         for i, data in loop:
 
             images2 = None
@@ -127,12 +117,12 @@ def train(
             else:
                 raise NotImplementedError(f'Dataset {cfg["dataset"]} not implemented')
 
-            if train_dataset.device.type != cfg['device']:
-                images1 = images1.to(cfg['device'])
+            if images1.device != device:
+                images1 = images1.to(device)
                 if images2 is not None:
-                    images2 = images2.to(cfg['device'])
+                    images2 = images2.to(device)
                 if actions is not None:
-                    actions = actions.to(cfg['device'])
+                    actions = actions.to(device)
 
             if cfg['aug_mode'] == 'transform':
                 images2, actions = transform(images1, 0.25)
@@ -142,17 +132,11 @@ def train(
                 images2 = None
                 actions = None
 
-            # check devices
-            assert images1.device.type == cfg['device'], f'images1 device is {images1.device}, expected {cfg["device"]}'
-            if images2 is not None:
-                assert images2.device.type == cfg['device'], f'images2 device is {images2.device}, expected {cfg["device"]}'
-            if actions is not None:
-                assert actions.device.type == cfg['device'], f'actions device is {actions.device}, expected {cfg["device"]}'
-            assert next(model.parameters()).device.type == cfg['device'], f'model device is {next(model.parameters()).device}, expected {cfg["device"]}'
-        
             loss = model.train_step(images1, images2, actions, teacher, epoch)
         
             loss.backward()
+
+            epoch_train_norms[i] = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0).detach()
 
             optimiser.step()
 
@@ -183,7 +167,7 @@ def train(
                     # actions = quaternion_delta(rot1, rot2)
                     # actions = axis_angle(rot1, rot2)
 
-                if val_dataset.device.type != device.type:
+                if images1.device != device:
                     images1 = images1.to(device)
                     if images2 is not None:
                         images2 = images2.to(device)
@@ -204,30 +188,37 @@ def train(
                 loss = model.train_step(images1, images2, actions, teacher, epoch)
                 epoch_val_losses[i] = loss.detach()
 
-
-        # evaluate representations
-        if writer is not None:
-            rep_metrics = get_rep_metrics(model, val_dataset, cfg)
-            writer.add_scalar('val/feature_corr', rep_metrics['corr'], epoch)
-            writer.add_scalar('val/feature_std', rep_metrics['std'], epoch)
-        
-        # single step linear classification eval
-        ss_val_acc, ss_val_loss = one_step_linear_probing(model, ss_train_loader, ss_val_loader)
-        
         last_train_loss = epoch_train_losses.mean().item()
+        last_train_norm = epoch_train_norms.mean().item()
         last_val_loss = epoch_val_losses.mean().item()
-        postfix = {'train_loss': last_train_loss, 'val_loss': last_val_loss}
+        if cfg['ddp']:
+            dist.all_reduce(last_train_loss, op=dist.ReduceOp.AVG)
+            dist.all_reduce(last_val_loss, op=dist.ReduceOp.AVG)
+        
+        if cfg['master_process']:
+            # single step linear classification eval
+            ss_val_acc, ss_val_loss = one_step_linear_probing(model, ss_train_loader, ss_val_loader)
+
+            # evaluate representations
+            if writer is not None:
+                rep_metrics = get_rep_metrics(model, val_dataset, cfg)
+                writer.add_scalar('val/feature_corr', rep_metrics['corr'], epoch)
+                writer.add_scalar('val/feature_std', rep_metrics['std'], epoch)
+
+            postfix = {'train_loss': last_train_loss, 'val_loss': last_val_loss}
+            if writer is not None:
+                writer.add_scalar('train/loss', last_train_loss, epoch)
+                writer.add_scalar('train/norm', last_train_norm, epoch)
+                writer.add_scalar('val/loss', last_val_loss, epoch)
+                writer.add_scalar('val/1step_accuracy', ss_val_acc, epoch)
+                writer.add_scalar('val/1step_loss', ss_val_loss, epoch)
+
+            if ss_val_loss < best_val_loss and cfg['save'] and epoch % cfg['save_every'] == 0:
+                best_val_loss = ss_val_loss
+                torch.save(model.state_dict(), cfg['save_dir'])
+
+    if cfg['master_process']:
         if writer is not None:
-            writer.add_scalar('train/loss', last_train_loss, epoch)
-            writer.add_scalar('val/loss', last_val_loss, epoch)
-            writer.add_scalar('val/1step_accuracy', ss_val_acc, epoch)
-            writer.add_scalar('val/1step_loss', ss_val_loss, epoch)
-
-        if ss_val_loss < best_val_loss and cfg['save'] and epoch % cfg['save_every'] == 0:
-            best_val_loss = ss_val_loss
-            torch.save(model.state_dict(), cfg['save_dir'])
-
-    rep_metrics = eval_representations(model, cfg)
-    if writer is not None:
-        writer.add_scalar('test/feature_corr', rep_metrics['corr'], epoch)
-        writer.add_scalar('test/feature_std', rep_metrics['std'], epoch)
+            rep_metrics = eval_representations(model, cfg)
+            writer.add_scalar('test/feature_corr', rep_metrics['corr'], epoch)
+            writer.add_scalar('test/feature_std', rep_metrics['std'], epoch)

@@ -263,7 +263,7 @@ def eval_representations(
     if cfg['dataset'] == 'mnist':
         test = MNIST(cfg['root'], 'test', transform=transforms.ToTensor(), device=device)
     elif cfg['dataset'] == 'modelnet10':
-        test = ModelNet10(cfg['root'], 'test', device=device, resolution=cfg['resolution'])
+        test = ModelNet10(cfg, 'test')
 
     # dataset type is mnist for both as get() returns (x,y)
     metrics = get_rep_metrics(model, test, cfg)
