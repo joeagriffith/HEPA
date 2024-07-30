@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from torch.distributed import dist
+import torch.distributed as dist
 from tqdm import tqdm
 from Utils.functional import cosine_schedule, aug_interact, aug_transform
 from Utils.evals import one_step_linear_probing, eval_representations, get_rep_metrics
@@ -18,7 +18,7 @@ def train(
         cfg:dict,
 ):
 
-    device = cfg['device'] + ':' + cfg['ddp_rank']
+    device = cfg['device'] + ':' + str(cfg['ddp_rank'])
 
     if cfg['transformation_fn'] == 'interact':
         transform = aug_interact

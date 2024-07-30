@@ -21,7 +21,7 @@ if __name__ == '__main__':
     # ======================== Handle configs =======================
     args = sys.argv[1:]
     assert len(args) == 1, 'Please provide a config file'
-    filepath = 'configs/' + args[0]
+    filepath = 'experiments/' + args[0]
     if not filepath.endswith('.yaml'):
         filepath += '.yaml'
     with open(filepath, 'r') as file:
@@ -86,12 +86,12 @@ if __name__ == '__main__':
             print(f'\n======================  Experiment: {cfg["experiment"]} == Trial: {cfg["trial"]} == Run: {cfg["run_no"]} ======================')
             start_time = time.time()
 
+        cfg['ddp'] = ddp
         cfg['ddp_rank'] = ddp_rank
         cfg['ddp_local_rank'] = ddp_local_rank
         cfg['ddp_world_size'] = ddp_world_size
         cfg['master_process'] = master_process
 
-        device = torch.device(cfg['device'])
         if cfg['device'] == 'cuda':
             torch.backends.cudnn.benchmark = True
 
@@ -116,7 +116,6 @@ if __name__ == '__main__':
             writer.add_text('model', str(model).replace('\n', '<br/>').replace(' ', '&nbsp;'))
             writer.add_text('config', json.dumps(cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
             writer.add_text('specified_config', json.dumps(specified_cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
-
 
         print(f'Training...')
         train(

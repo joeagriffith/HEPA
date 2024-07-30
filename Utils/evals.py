@@ -36,8 +36,8 @@ def linear_probing(
         val = MNIST(root=cfg['root'], split='val', device=device)
 
     elif cfg['dataset'] == 'modelnet10':
-        train = ModelNet10Simple(root=cfg['root'], split='train', n=n_per_class, device=device, resolution=cfg['resolution'])
-        val = ModelNet10Simple(root=cfg['root'], split='val', n=10, device=device, resolution=cfg['resolution'])
+        train = ModelNet10Simple(cfg, split='train', n=n_per_class)
+        val = ModelNet10Simple(cfg, split='val', n=10)
 
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val, batch_size=1000, shuffle=False)
@@ -149,7 +149,7 @@ def linear_probing(
     if cfg['dataset'] == 'mnist':
         t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)
     elif cfg['dataset'] == 'modelnet10':
-        t_dataset = ModelNet10Simple(root=cfg['root'], split='test', device=device, resolution=cfg['resolution'])
+        t_dataset = ModelNet10Simple(cfg, split='test')
     test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device)
     test_loader = DataLoader(test, batch_size=100, shuffle=False)
 
