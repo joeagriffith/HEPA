@@ -12,7 +12,6 @@ from Examples.ModelNet10.dataset import ModelNet10, ModelNet10Simple
 from Examples.MNIST.dataset import MNIST
 from Utils.functional import feature_correlation, feature_std
 
-
 def linear_probing(
     model: nn.Module,
     writer: SummaryWriter,
@@ -77,7 +76,7 @@ def linear_probing(
         if finetune:
             encoder.train()
 
-        if not cfg['local']:
+        if cfg['local']:
             loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
             loop.set_description(f'Epoch [{epoch}/{num_epochs}]')
             if epoch > 0:
@@ -146,8 +145,6 @@ def linear_probing(
             'val_loss': last_val_loss.item(),
             'val_accuracy': last_val_acc.item(),
         }
-        loop.set_postfix(postfix)
-        loop.close()
 
     if cfg['dataset'] == 'mnist':
         t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)

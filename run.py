@@ -85,7 +85,7 @@ if __name__ == '__main__':
                     os.makedirs(trial_save_dir)
                 cfg['save_dir'] = trial_save_dir + str(cfg['run_no']) + '.pth'
 
-            print(f'\n======================  Experiment: {cfg["experiment"]} == Trial: {cfg["trial"]} == Run: {cfg["run_no"]} ======================')
+            print(f'\n======================  Dataset: {cfg["dataset"]} == Experiment: {cfg["experiment"]} == Trial: {cfg["trial"]} == Run: {cfg["run_no"]} ======================')
             start_time = time.time()
 
         cfg['ddp'] = ddp
@@ -106,7 +106,6 @@ if __name__ == '__main__':
         raw_model = model.module if ddp else model
         cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['device']))
         cfg['local'] = "PBS_JOBID" not in os.environ
-        cfg['local'] = False
 
         # Init Optimiser
         optimiser = get_optimiser(raw_model, cfg)
