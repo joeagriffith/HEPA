@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import yaml
+import platform
 
 import torch
 import torchvision.transforms as transforms
@@ -66,8 +67,6 @@ if __name__ == '__main__':
     
 
     for (cfg, specified_cfg) in cfgs:
-        if cfg['hpc']:
-            cfg['root'] = '$HOME/Datasets/'
 
         assert cfg['device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
 
@@ -106,6 +105,9 @@ if __name__ == '__main__':
         if ddp:
             model = DDP(model, device_ids=[ddp_local_rank])
         raw_model = model.module if ddp else model
+        cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['device']))
+
+        cfg['local'] = "PBS_JOBID" not in os.environ
 
         # Init Optimiser
         optimiser = get_optimiser(raw_model, cfg)
@@ -136,12 +138,6 @@ if __name__ == '__main__':
             if not os.path.exists(prof_dir):
                 os.makedirs(prof_dir)
             prof.export_chrome_trace(prof_dir + 'trace.json')
-            prof.export_stacks(prof_dir + 'stacks.txt', 'self_cpu_time_total')
-            prof.export_stacks(prof_dir + 'stacks_cuda.txt', 'self_cuda_time_total')
-            prof.export_stacks(prof_dir + 'stacks_memory.txt', 'self_memory_usage_bytes')
-            prof.export_stacks(prof_dir + 'stacks_cuda_memory.txt', 'self_cuda_memory_usage_bytes')
-            prof.export_stacks(prof_dir + 'stacks_cuda_allocated.txt', 'self_cuda_allocated_memory_bytes')
-            prof.export_stacks(prof_dir + 'stacks_cuda_reserved.txt', 'self_cuda_reserved_memory_bytes')
         else:
             train(
                 model,
