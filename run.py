@@ -63,7 +63,6 @@ if __name__ == '__main__':
             device = "cuda"
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             device = "mps"
-        print(f"using device: {device}")
     
 
     for (cfg, specified_cfg) in cfgs:
@@ -107,6 +106,7 @@ if __name__ == '__main__':
         raw_model = model.module if ddp else model
         cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['device']))
         cfg['local'] = "PBS_JOBID" not in os.environ
+        cfg['local'] = False
 
         # Init Optimiser
         optimiser = get_optimiser(raw_model, cfg)

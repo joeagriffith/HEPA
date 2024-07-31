@@ -94,14 +94,15 @@ def get_datasets(cfg):
     if cfg['dataset'] == 'mnist':
         dataset = datasets.MNIST(root=cfg['root'], train=True, transform=transforms.ToTensor(), download=True)
 
+
         VAL_RATIO = 0.2
         n_val = int(len(dataset) * VAL_RATIO)
         n_train = len(dataset) - n_val
         train_set, val_set = torch.utils.data.random_split(dataset, [n_train, n_val])
 
         device = torch.device(cfg['device'])
-        train_set = PreloadedDataset.from_dataset(train_set, None, device, tqdm=cfg['local'])
-        val_set = PreloadedDataset.from_dataset(val_set, None, device, tqdm=cfg['local'])
+        train_set = PreloadedDataset.from_dataset(train_set, None, device, use_tqdm=cfg['local'])
+        val_set = PreloadedDataset.from_dataset(val_set, None, device, use_tqdm=cfg['local'])
     
     elif cfg['dataset'] == 'modelnet10':
         train_set = ModelNet10(cfg, 'train')
@@ -113,8 +114,8 @@ def get_datasets(cfg):
 def get_ss_datasets(cfg):
     device = torch.device(cfg['device'])
     if cfg['dataset'] == 'mnist':
-        ss_train_dataset = MNIST(root=cfg['root'], split='train', n=1, transform=transforms.ToTensor(), device=device)
-        ss_val_dataset = MNIST(root=cfg['root'], split='val', transform=transforms.ToTensor(), device=device)
+        ss_train_dataset = MNIST(cfg, split='train', n=1, transform=transforms.ToTensor())
+        ss_val_dataset = MNIST(cfg, split='val', transform=transforms.ToTensor())
     elif cfg['dataset'] == 'modelnet10':
         ss_train_dataset = ModelNet10Simple(cfg, split='train', n=10, transform=None)
         ss_val_dataset = ModelNet10Simple(cfg, split='val', n=10, transform=None)

@@ -20,7 +20,7 @@ def remove_to_tensor(transform):
 
 
 class PreloadedDataset(Dataset):
-    def __init__(self, main_dir, shape, transform=None, device="cpu", shuffle=False, tqdm=True):
+    def __init__(self, main_dir, shape, transform=None, device="cpu", shuffle=False, use_tqdm=True):
         self.main_dir = main_dir
         self.shape = shape
         self.transform = transform
@@ -38,7 +38,7 @@ class PreloadedDataset(Dataset):
         
         #  preload images
         if self.main_dir is not None:
-            loop = tqdm(enumerate(self.classes), total=len(self.classes), leave=False) if tqdm else enumerate(self.classes)
+            loop = tqdm(enumerate(self.classes), total=len(self.classes), leave=False) if use_tqdm else enumerate(self.classes)
             for class_idx, class_name in loop:
                 class_dir = os.path.join(self.main_dir, class_name)
                 image_names = os.listdir(class_dir)
@@ -66,11 +66,11 @@ class PreloadedDataset(Dataset):
             self._shuffle()
         
     #  Useful for loading data which is stored in a different format to TinyImageNet30
-    def from_dataset(dataset, transform, device="cpu", tqdm=True):
-        preloaded_dataset = PreloadedDataset(None, dataset.__getitem__(0)[0].shape, tqdm=tqdm)
+    def from_dataset(dataset, transform, device="cpu", use_tqdm=True):
+        preloaded_dataset = PreloadedDataset(None, dataset.__getitem__(0)[0].shape, use_tqdm=use_tqdm)
         data = []
         targets = []
-        loop = tqdm(range(len(dataset)), leave=False) if tqdm else range(len(dataset))
+        loop = tqdm(range(len(dataset)), leave=False) if use_tqdm else range(len(dataset))
         for i in loop:
             d, t = dataset.__getitem__(i)
             if type(t) is not torch.Tensor:

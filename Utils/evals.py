@@ -32,8 +32,8 @@ def linear_probing(
     lr = 0.01
 
     if cfg['dataset'] == 'mnist':
-        train = MNIST(root=cfg['root'], split='train', n=n_per_class, device=device)
-        val = MNIST(root=cfg['root'], split='val', device=device)
+        train = MNIST(cfg, split='train', n=n_per_class)
+        val = MNIST(cfg, split='val')
 
     elif cfg['dataset'] == 'modelnet10':
         train = ModelNet10Simple(cfg, split='train', n=n_per_class)
@@ -153,7 +153,7 @@ def linear_probing(
         t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)
     elif cfg['dataset'] == 'modelnet10':
         t_dataset = ModelNet10Simple(cfg, split='test')
-    test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device, tqdm=cfg['local'])
+    test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device, use_tqdm=cfg['local'])
     test_loader = DataLoader(test, batch_size=100, shuffle=False)
 
     test_accs = torch.zeros(len(test_loader), device=device)
@@ -264,7 +264,7 @@ def eval_representations(
     device = torch.device(cfg['device'])
 
     if cfg['dataset'] == 'mnist':
-        test = MNIST(cfg['root'], 'test', transform=transforms.ToTensor(), device=device)
+        test = MNIST(cfg, 'test', transform=transforms.ToTensor())
     elif cfg['dataset'] == 'modelnet10':
         test = ModelNet10(cfg, 'test')
 

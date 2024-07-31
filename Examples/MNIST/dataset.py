@@ -9,9 +9,11 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 
-def MNIST(root, split, n=None, transform=None, device=torch.device('cpu')):
+def MNIST(cfg, split, n=None, transform=None):
     # Load data
     assert split in ['train', 'val', 'test']
+    device = cfg['device']
+    root = cfg['root']
     train = split in ['train', 'val']
     dataset = datasets.MNIST(root=root, train=train, transform=transforms.ToTensor(), download=True)
     if transform is None:
@@ -20,7 +22,7 @@ def MNIST(root, split, n=None, transform=None, device=torch.device('cpu')):
     if split == 'train':
         # Build train dataset
         dataset = torch.utils.data.Subset(dataset, range(0, len(dataset) - 10000))
-        dataset = PreloadedDataset.from_dataset(dataset, transform, device)
+        dataset = PreloadedDataset.from_dataset(dataset, transform, device, cfg['local'])
         if n is not None:
             train_indices = []
             for i in range(10):
@@ -36,11 +38,11 @@ def MNIST(root, split, n=None, transform=None, device=torch.device('cpu')):
         if n is not None:
             raise NotImplementedError('n not implemented for val_set')
         dataset = torch.utils.data.Subset(dataset, range(len(dataset) - 10000, len(dataset)))
-        dataset = PreloadedDataset.from_dataset(dataset, transforms.ToTensor(), device)
+        dataset = PreloadedDataset.from_dataset(dataset, transforms.ToTensor(), device, cfg['local'])
     
     elif split == 'test':
         if n is not None:
             raise NotImplementedError('n not implemented for test_set')
-        dataset = PreloadedDataset.from_dataset(dataset, transform, device)
+        dataset = PreloadedDataset.from_dataset(dataset, transform, device, cfg['local'])
 
     return dataset
