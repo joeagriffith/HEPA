@@ -1,7 +1,7 @@
 cfgs:
 
   - dataset: modelnet10
-    experiment: test
+    experiment: hpc
     trial: BYOL
     model_type: BYOL
     save: True
@@ -9,7 +9,7 @@ cfgs:
     warmup: 0
 
   - dataset: modelnet10
-    experiment: test
+    experiment: hpc
     trial: iGPA
     model_type: iGPA
     save: True
@@ -17,7 +17,7 @@ cfgs:
     warmup: 0
 
   - dataset: modelnet10
-    experiment: test
+    experiment: hpc
     trial: AE
     model_type: AE
     save: True

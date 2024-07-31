@@ -1,24 +1,25 @@
 cfgs:
-  # - dataset: mnist
-  #   experiment: testing
-  #   trial: AE
-  #   model_type: AE
-  #   save: True
-  #   num_epochs: 2
-  #   warmup: 0
+  - dataset: mnist
+    experiment: hpc
+    trial: AE
+    model_type: AE
+    save: True
+    num_epochs: 2
+    warmup: 0
 
   - dataset: mnist
-    experiment: new_test
+    experiment: hpc
     trial: iGPA
     model_type: iGPA
     save: True
-    num_epochs: 10
+    num_epochs: 2
     warmup: 0
+    profile: False
 
-  # - dataset: mnist
-  #   experiment: testing
-  #   trial: BYOL
-  #   model_type: BYOL
-  #   save: True
-  #   num_epochs: 2
-  #   warmup: 0
+  - dataset: mnist
+    experiment: hpc
+    trial: BYOL
+    model_type: BYOL
+    save: True
+    num_epochs: 2
+    warmup: 0

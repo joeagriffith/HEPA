@@ -77,10 +77,13 @@ def linear_probing(
         if finetune:
             encoder.train()
 
-        loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
-        loop.set_description(f'Epoch [{epoch}/{num_epochs}]')
-        if epoch > 0:
-            loop.set_postfix(postfix)
+        if not cfg['local']:
+            loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
+            loop.set_description(f'Epoch [{epoch}/{num_epochs}]')
+            if epoch > 0:
+                loop.set_postfix(postfix)
+        else:
+            loop = enumerate(train_loader)
         epoch_train_loss = torch.zeros(len(train_loader), device=device)
         epoch_train_acc = torch.zeros(len(train_loader), device=device)
         for i, (x, y) in loop:
@@ -150,7 +153,7 @@ def linear_probing(
         t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)
     elif cfg['dataset'] == 'modelnet10':
         t_dataset = ModelNet10Simple(cfg, split='test')
-    test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device)
+    test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device, tqdm=cfg['local'])
     test_loader = DataLoader(test, batch_size=100, shuffle=False)
 
     test_accs = torch.zeros(len(test_loader), device=device)

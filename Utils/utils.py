@@ -100,8 +100,8 @@ def get_datasets(cfg):
         train_set, val_set = torch.utils.data.random_split(dataset, [n_train, n_val])
 
         device = torch.device(cfg['device'])
-        train_set = PreloadedDataset.from_dataset(train_set, None, device)
-        val_set = PreloadedDataset.from_dataset(val_set, None, device)
+        train_set = PreloadedDataset.from_dataset(train_set, None, device, tqdm=cfg['local'])
+        val_set = PreloadedDataset.from_dataset(val_set, None, device, tqdm=cfg['local'])
     
     elif cfg['dataset'] == 'modelnet10':
         train_set = ModelNet10(cfg, 'train')

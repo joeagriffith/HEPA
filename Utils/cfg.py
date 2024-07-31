@@ -97,7 +97,7 @@ def base_cfg(
         'device': 'cuda',
         'use_compile': False,
         'seed': 42,
-        'hpc': False,
+        'local': True,
         'profile': False,
 
         'dataset': dataset,

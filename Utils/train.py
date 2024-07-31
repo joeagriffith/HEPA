@@ -96,7 +96,7 @@ def train(
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
         epoch_train_norms = torch.zeros(len(train_loader), device=device)
-        if cfg['master_process']:
+        if cfg['master_process'] and cfg['local']:
             loop = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
             loop.set_description(f'Epoch [{epoch}/{cfg["num_epochs"]}]')
             if epoch > 0:
