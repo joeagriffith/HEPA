@@ -106,7 +106,6 @@ if __name__ == '__main__':
             model = DDP(model, device_ids=[ddp_local_rank])
         raw_model = model.module if ddp else model
         cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['device']))
-
         cfg['local'] = "PBS_JOBID" not in os.environ
 
         # Init Optimiser
