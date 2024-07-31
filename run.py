@@ -22,7 +22,7 @@ if __name__ == '__main__':
     # ======================== Handle configs =======================
     args = sys.argv[1:]
     assert len(args) == 1, 'Please provide a config file'
-    filepath = 'experiments/' + args[0]
+    filepath = 'Experiments/' + args[0]
     if not filepath.endswith('.yaml'):
         filepath += '.yaml'
     with open(filepath, 'r') as file:
@@ -122,7 +122,27 @@ if __name__ == '__main__':
             writer.add_text('specified_config', json.dumps(specified_cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
 
         print(f'Training...')
-        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], with_stack=True, record_shapes=True, profile_memory=True) as prof:
+        if master_process and cfg['profile']:
+            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
+                train(
+                    model,
+                    optimiser,
+                    train_set,
+                    val_set,
+                    writer=writer,
+                    cfg=cfg,
+                )
+            prof_dir = 'out/profiling/' + cfg['experiment'] + '/' + cfg['trial'] + '/' + str(cfg['run_no']) + '/'
+            if not os.path.exists(prof_dir):
+                os.makedirs(prof_dir)
+            prof.export_chrome_trace(prof_dir + 'trace.json')
+            prof.export_stacks(prof_dir + 'stacks.txt', 'self_cpu_time_total')
+            prof.export_stacks(prof_dir + 'stacks_cuda.txt', 'self_cuda_time_total')
+            prof.export_stacks(prof_dir + 'stacks_memory.txt', 'self_memory_usage_bytes')
+            prof.export_stacks(prof_dir + 'stacks_cuda_memory.txt', 'self_cuda_memory_usage_bytes')
+            prof.export_stacks(prof_dir + 'stacks_cuda_allocated.txt', 'self_cuda_allocated_memory_bytes')
+            prof.export_stacks(prof_dir + 'stacks_cuda_reserved.txt', 'self_cuda_reserved_memory_bytes')
+        else:
             train(
                 model,
                 optimiser,
@@ -131,16 +151,6 @@ if __name__ == '__main__':
                 writer=writer,
                 cfg=cfg,
             )
-        prof_dir = 'out/profiling/' + cfg['experiment'] + '/' + cfg['trial'] + '/' + str(cfg['run_no']) + '/'
-        if not os.path.exists(prof_dir):
-            os.makedirs(prof_dir)
-        prof.export_chrome_trace(prof_dir + 'trace.json')
-        prof.export_stacks(prof_dir + 'stacks.txt', 'self_cpu_time_total')
-        prof.export_stacks(prof_dir + 'stacks_cuda.txt', 'self_cuda_time_total')
-        prof.export_stacks(prof_dir + 'stacks_memory.txt', 'self_memory_usage_bytes')
-        prof.export_stacks(prof_dir + 'stacks_cuda_memory.txt', 'self_cuda_memory_usage_bytes')
-        prof.export_stacks(prof_dir + 'stacks_cuda_allocated.txt', 'self_cuda_allocated_memory_bytes')
-        prof.export_stacks(prof_dir + 'stacks_cuda_reserved.txt', 'self_cuda_reserved_memory_bytes')
 
         if master_process:
             # linear probing
