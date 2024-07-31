@@ -98,6 +98,7 @@ def base_cfg(
         'use_compile': False,
         'seed': 42,
         'hpc': False,
+        'profile': False,
 
         'dataset': dataset,
         'dataset_dtype': 'float32',

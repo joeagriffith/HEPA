@@ -6,6 +6,7 @@ import yaml
 
 import torch
 import torchvision.transforms as transforms
+from torch.profiler import profile, record_function, ProfilerActivity
 
 from torch.distributed import init_process_group, destroy_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -121,14 +122,25 @@ if __name__ == '__main__':
             writer.add_text('specified_config', json.dumps(specified_cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
 
         print(f'Training...')
-        train(
-            model,
-            optimiser,
-            train_set,
-            val_set,
-            writer=writer,
-            cfg=cfg,
-        )
+        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], with_stack=True, record_shapes=True, profile_memory=True) as prof:
+            train(
+                model,
+                optimiser,
+                train_set,
+                val_set,
+                writer=writer,
+                cfg=cfg,
+            )
+        prof_dir = 'out/profiling/' + cfg['experiment'] + '/' + cfg['trial'] + '/' + str(cfg['run_no']) + '/'
+        if not os.path.exists(prof_dir):
+            os.makedirs(prof_dir)
+        prof.export_chrome_trace(prof_dir + 'trace.json')
+        prof.export_stacks(prof_dir + 'stacks.txt', 'self_cpu_time_total')
+        prof.export_stacks(prof_dir + 'stacks_cuda.txt', 'self_cuda_time_total')
+        prof.export_stacks(prof_dir + 'stacks_memory.txt', 'self_memory_usage_bytes')
+        prof.export_stacks(prof_dir + 'stacks_cuda_memory.txt', 'self_cuda_memory_usage_bytes')
+        prof.export_stacks(prof_dir + 'stacks_cuda_allocated.txt', 'self_cuda_allocated_memory_bytes')
+        prof.export_stacks(prof_dir + 'stacks_cuda_reserved.txt', 'self_cuda_reserved_memory_bytes')
 
         if master_process:
             # linear probing
