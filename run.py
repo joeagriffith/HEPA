@@ -19,6 +19,8 @@ from Utils.utils import get_optimiser, get_model, get_datasets, get_writer
 from Utils.cfg import mnist_cfg, modelnet10_cfg
 
 if __name__ == '__main__':
+    start_time = time.time()
+    print(f'Start time: {start_time}')
 
     # ======================== Handle configs =======================
     args = sys.argv[1:]
@@ -37,6 +39,9 @@ if __name__ == '__main__':
             cfgs.append(mnist_cfg(**yaml_cfg))
         else:
             raise ValueError(f'Dataset {yaml_cfg["dataset"]} not supported')
+    
+    cfg_time = time.time()
+    print(f'loaded cfgs, took: {cfg_time - start_time:.2f}s')
 
     # ======================== Handle devices =======================
     # DDP Code from Karpathy @ https://github.com/karpathy/build-nanogpt/blob/master/train_gpt2.py
@@ -64,10 +69,13 @@ if __name__ == '__main__':
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             device = "mps"
     
+    ddp_time = time.time()
+    print(f'DDP setup, took: {ddp_time - cfg_time:.2f}s')
 
     for (cfg, specified_cfg) in cfgs:
-
-        assert cfg['device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
+        if master_process:
+            cfg_start_time = time.time()
+            assert cfg['device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
 
         torch.manual_seed(cfg['seed'])
         if torch.cuda.is_available():
@@ -96,6 +104,10 @@ if __name__ == '__main__':
 
         if cfg['device'] == 'cuda':
             torch.backends.cudnn.benchmark = True
+        
+        if master_process:
+            cfg_init_time = time.time()
+            print(f'cfg init, took: {cfg_init_time - cfg_start_time:.2f}s')
 
         # Init Model
         model = get_model(cfg)
@@ -106,6 +118,10 @@ if __name__ == '__main__':
         raw_model = model.module if ddp else model
         cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['device']))
         cfg['local'] = "PBS_JOBID" not in os.environ
+
+        if master_process:
+            model_init_time = time.time()
+            print(f'model init, took: {model_init_time - cfg_init_time:.2f}s')
 
         # Init Optimiser
         optimiser = get_optimiser(raw_model, cfg)
@@ -120,6 +136,10 @@ if __name__ == '__main__':
             writer.add_text('model', str(model).replace('\n', '<br/>').replace(' ', '&nbsp;'))
             writer.add_text('config', json.dumps(cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
             writer.add_text('specified_config', json.dumps(specified_cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
+        
+        if master_process:
+            optimiser_init_time = time.time()
+            print(f'optimiser init, took: {optimiser_init_time - cfg_init_time:.2f}s')
 
         print(f'Training...')
         if master_process and cfg['profile']:

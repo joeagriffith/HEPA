@@ -143,11 +143,15 @@ class ModelNet10(torch.utils.data.Dataset):
     def __getitem__(self, idx):
 
         idx1 = np.random.randint(64)
-        idx2 = np.random.randint(64)
+        idx2 = (idx1 + 1) % 64
+        # idx2 = np.random.randint(64)
+
+        img1 = self.data[idx][idx1]
+        img2 = self.data[idx][idx2]
 
         if self.dataset_dtype == 'uint8':
-            img1 = self.data[idx][idx1].to(torch.float32) / 255.0
-            img2 = self.data[idx][idx2].to(torch.float32) / 255.0
+            img1 = img1.to(torch.float32) / 255.0
+            img2 = img2.to(torch.float32) / 255.0
 
         if self.transform is not None:
             img1 = self.transform(img1)

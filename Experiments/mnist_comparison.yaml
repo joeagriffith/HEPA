@@ -1,0 +1,25 @@
+cfgs:
+  - dataset: mnist
+    experiment: comparison
+    trial: AE
+    model_type: AE
+    save: True
+    num_epochs: 2
+    warmup: 0
+
+  - dataset: mnist
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: True
+    num_epochs: 2
+    warmup: 0
+    profile: False
+
+  - dataset: mnist
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: True
+    num_epochs: 2
+    warmup: 0
