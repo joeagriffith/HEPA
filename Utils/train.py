@@ -111,8 +111,8 @@ def train(
                 images1, _ = data
             elif cfg['dataset'] == 'modelnet10':
                 (images1, rot1, _), (images2, rot2, _) = data
-                actions = (rot2 - rot1) / 360.0
-                # actions = quaternion_delta(rot1, rot2)
+                # actions = (rot2 - rot1) / 360.0
+                actions = quaternion_delta(rot1, rot2)
                 # actions = axis_angle(rot1, rot2)
             else:
                 raise NotImplementedError(f'Dataset {cfg["dataset"]} not implemented')
@@ -163,8 +163,8 @@ def train(
                     images1, _ = data
                 elif cfg['dataset'] == 'modelnet10':
                     (images1, rot1, _), (images2, rot2, _) = data
-                    actions = (rot2 - rot1) / 360.0
-                    # actions = quaternion_delta(rot1, rot2)
+                    # actions = (rot2 - rot1) / 360.0
+                    actions = quaternion_delta(rot1, rot2)
                     # actions = axis_angle(rot1, rot2)
 
                 if images1.device != device:

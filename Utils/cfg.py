@@ -59,7 +59,8 @@ def modelnet10_cfg(
         'batch_size': 128,
         'in_features': 1,
         'backbone': 'resnet18',
-        'num_actions': 3,
+        # 'num_actions': 3,
+        'num_actions': 4,
         'classifier_subset_sizes': [1, 10, 50],
     }
 

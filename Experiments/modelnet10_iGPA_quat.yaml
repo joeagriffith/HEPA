@@ -1,0 +1,35 @@
+cfgs:
+  - dataset: modelnet10
+    experiment: quat
+    trial: iGPA
+    model_type: iGPA
+    save: True
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: quat
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: quat
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: quat
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: quat
+    trial: iGPA
+    model_type: iGPA
+    save: False
+    num_epochs: 500

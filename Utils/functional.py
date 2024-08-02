@@ -146,6 +146,7 @@ def repeat_interleave_batch(x, B, repeat):
     return x
 
 def euler_to_quaternion(euler):
+    euler = euler.cpu()
     return R.from_euler('xyz', euler, degrees=True).as_quat()
 
 def quaternion_delta(euler_from, euler_to):
