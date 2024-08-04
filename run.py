@@ -73,6 +73,8 @@ if __name__ == '__main__':
     print(f'DDP setup, took: {ddp_time - cfg_time:.2f}s')
 
     for (cfg, specified_cfg) in cfgs:
+        cfg_start_time = time.time()
+
         if master_process:
             cfg_start_time = time.time()
             assert cfg['device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
@@ -106,8 +108,8 @@ if __name__ == '__main__':
             torch.backends.cudnn.benchmark = True
         
         if master_process:
-            cfg_init_time = time.time()
-            print(f'cfg init, took: {cfg_init_time - cfg_start_time:.2f}s')
+            init_time = time.time()
+            print(f'cfg init, took: {init_time - cfg_start_time:.2f}s')
 
         # Init Model
         model = get_model(cfg)
@@ -121,7 +123,7 @@ if __name__ == '__main__':
 
         if master_process:
             model_init_time = time.time()
-            print(f'model init, took: {model_init_time - cfg_init_time:.2f}s')
+            print(f'model init, took: {model_init_time - init_time:.2f}s')
 
         # Init Optimiser
         optimiser = get_optimiser(raw_model, cfg)
@@ -139,7 +141,7 @@ if __name__ == '__main__':
         
         if master_process:
             optimiser_init_time = time.time()
-            print(f'optimiser init, took: {optimiser_init_time - cfg_init_time:.2f}s')
+            print(f'dataset and optimiser init, took: {optimiser_init_time - model_init_time:.2f}s')
 
         print(f'Training...')
         if master_process and cfg['profile']:
@@ -176,4 +178,5 @@ if __name__ == '__main__':
                         linear_probing(model, writer, n, cfg)
             else:
                 print('No logging, skipping linear probing')
-            print(f'Done - Time taken: {time.time() - start_time:.2f}s')
+            print(f'train took: {time.time() - optimiser_init_time:.2f}s')
+            print(f'Done - Total Time taken: {time.time() - start_time:.2f}s')

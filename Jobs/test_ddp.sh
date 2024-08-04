@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -lselect=1:ncpus=4:mem=10gb:ngpus=1
+#PBS -lselect=1:ncpus=4:mem=10gb:ngpus=4
 #PBS -lwalltime=01:00:00
 
 module load tools/prod
