@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 import torch.distributed as dist
 from tqdm import tqdm
-from Utils.functional import cosine_schedule, aug_interact, aug_transform
+from Utils.functional import cosine_schedule
 from Utils.evals import one_step_linear_probing, eval_representations, get_rep_metrics
 from Utils.functional import quaternion_delta, axis_angle
 from Utils.utils import get_ss_datasets
@@ -19,18 +19,6 @@ def train(
 ):
 
     device = cfg['device'] + ':' + str(cfg['ddp_rank'])
-
-    if cfg['transformation_fn'] == 'interact':
-        transform = aug_interact
-    elif cfg['transformation_fn'] == 'perturb':
-        transform = aug_transform
-    else:
-        assert cfg['transformation_fn'] is None, 'transformation function must be "interact", "perturb" or None'
-
-    assert cfg['aug_mode'] in ['none', 'transform', 'sample']
-    if cfg['aug_mode'] == 'transform':
-        assert cfg['transformation_fn'] is not None, 'transformation must be provided if aug_mode is "transform"'
-    assert cfg['dataset'] in ['mnist', 'modelnet10'], 'dataset must be one of ["mnist", "modelnet10"]'
 
 #============================== Online Model Learning Parameters ==============================
     # LR schedule, warmup then cosine
@@ -124,15 +112,13 @@ def train(
                 if actions is not None:
                     actions = actions.to(device)
 
-            if cfg['aug_mode'] == 'transform':
-                images2, actions = transform(images1, 0.25)
-            elif cfg['aug_mode'] == 'sample':
-                assert cfg['dataset'] == 'modelnet10', 'sample mode only implemented for modelnet10'
-            else:
-                images2 = None
-                actions = None
-
-            loss = model.train_step(images1, images2, actions, teacher, epoch)
+            loss = model.train_step(
+                img1=images1, 
+                img2=images2, 
+                actions=actions, 
+                teacher=teacher, 
+                epoch=epoch
+            )
         
             loss.backward()
 
@@ -174,18 +160,13 @@ def train(
                     if actions is not None:
                         actions = actions.to(device)
 
-                if cfg['aug_mode'] == 'transform':
-                    images2, actions = transform(images1, 0.25)
-                elif cfg['aug_mode'] == 'sample':
-                    assert cfg['dataset'] == 'modelnet10', 'sample mode only implemented for modelnet10'
-                else:
-                    images2 = None
-                    actions = None
-
-                if cfg['model_type'] == 'iGPA' and not cfg['consider_actions']:
-                    actions = None
-
-                loss = model.train_step(images1, images2, actions, teacher, epoch)
+                loss = model.train_step(
+                    img1=images1, 
+                    img2=images2, 
+                    actions=actions, 
+                    teacher=teacher, 
+                    epoch=epoch
+                )
                 epoch_val_losses[i] = loss.detach()
 
         last_train_loss = epoch_train_losses.mean().item()

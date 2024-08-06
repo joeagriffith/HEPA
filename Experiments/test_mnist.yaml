@@ -1,6 +1,15 @@
 cfgs:
   - dataset: mnist
-    experiment: hpc
+    experiment: local_delme
+    trial: iJEPA
+    model_type: iJEPA
+    save: True
+    num_epochs: 2
+    warmup: 0
+    use_cls_token: True
+
+  - dataset: mnist
+    experiment: local_delme
     trial: AE
     model_type: AE
     save: True
@@ -8,16 +17,15 @@ cfgs:
     warmup: 0
 
   - dataset: mnist
-    experiment: hpc
+    experiment: local_delme
     trial: iGPA
     model_type: iGPA
     save: True
     num_epochs: 2
     warmup: 0
-    profile: False
 
   - dataset: mnist
-    experiment: hpc
+    experiment: local_delme
     trial: BYOL
     model_type: BYOL
     save: True

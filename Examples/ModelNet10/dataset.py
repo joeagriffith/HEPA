@@ -9,19 +9,33 @@ import time
 
 
 class ModelNet10(torch.utils.data.Dataset):
-    def __init__(self, cfg, split, n=None, transform=None):
+    def __init__(
+            self, 
+            root, 
+            split, 
+            n=None, 
+            transform=None, 
+            device='cpu', 
+            use_tqdm=True, 
+            resolution=128, 
+            dataset_dtype='uint8', 
+            rank=1, 
+            world_size=1, 
+            seed=42
+        ):
         assert split in ['train', 'val', 'test']
         if split == 'val':
             assert n is not None, 'n must be specified for val split, or use .split_set()'
-        self.device = cfg['device']
-        self.root = cfg['root']
+        self.device = device
+        self.root = root
         file_split = 'train' if split == 'val' else split
         self.split = split
         self.classes = os.listdir(self.root + 'ModelNet10/' + file_split)
         self.class_n = {}
         self.transform = transform
-        self.resolution = cfg['resolution']
-        self.dataset_dtype = cfg['dataset_dtype']
+        self.resolution = resolution
+        self.dataset_dtype = dataset_dtype
+
         for c in self.classes:
             self.class_n[c] = len(os.listdir(self.root + 'ModelNet10/' + file_split + '/' + c))
         if n is None:
@@ -32,7 +46,8 @@ class ModelNet10(torch.utils.data.Dataset):
         self.n = n
 
         path = self.root + 'ModelNet10/tensors/' + split + f'_dataset_n{self.n}_{self.resolution}.pth' if self.n is not None else self.root + 'ModelNet10/tensors/' + split + f'_dataset_{self.resolution}.pth'
-        path_224 = self.root + 'ModelNet10/tensors/' + split + f'_dataset_n{self.n}_{self.resolution}.pth' if self.n is not None else self.root + 'ModelNet10/tensors/' + split + f'_dataset_{224}.pth'
+        path_224 = self.root + 'ModelNet10/tensors/' + split + f'_dataset_n{self.n}_224.pth' if self.n is not None else self.root + 'ModelNet10/tensors/' + split + f'_dataset_{224}.pth'
+
         if os.path.exists(path):
             tensors = torch.load(path)
             self.data = tensors['data']
@@ -58,7 +73,10 @@ class ModelNet10(torch.utils.data.Dataset):
 
             guid = 0 if split in ['train', 'test'] else (sum(self.class_n.values()) * 64) - 1 # start from end if val split
             idx = 0
-            c_loop = tqdm(enumerate(self.classes), total=len(self.classes)) if split in ['train', 'test'] else tqdm(reversed(list(enumerate(self.classes))), total=len(self.classes))
+            if use_tqdm:
+                c_loop = tqdm(enumerate(self.classes), total=len(self.classes)) if split in ['train', 'test'] else tqdm(reversed(list(enumerate(self.classes))), total=len(self.classes))
+            else:
+                c_loop = enumerate(self.classes) if split in ['train', 'test'] else reversed(list(enumerate(self.classes)))
             for c_i, c in c_loop:
                 num = 0
                 o_loop = os.listdir(self.root + 'ModelNet10/' + file_split + '/' + c) if split in ['train', 'test'] else reversed(os.listdir(self.root + 'ModelNet10/' + file_split + '/' + c))
@@ -89,12 +107,12 @@ class ModelNet10(torch.utils.data.Dataset):
 
             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path)
         
-        # remove data not accessed by process
-        if cfg['ddp']:
-            self.shuffle(cfg['seed'])
-            proc_len = self.length // cfg['ddp_world_size']
-            lo = proc_len * cfg['ddp_rank']
-            hi = proc_len * cfg['ddp_rank'] + proc_len
+        # # remove data not accessed by process
+        if world_size > 1:
+            self.shuffle(seed)
+            proc_len = self.length // world_size
+            lo = proc_len * rank
+            hi = proc_len * rank + proc_len
             self.data = self.data[lo:hi]
             self.rotations = self.rotations[lo:hi]
             self.labels = self.labels[lo:hi]
@@ -114,16 +132,8 @@ class ModelNet10(torch.utils.data.Dataset):
 
         self.shuffle()
 
-        fake_cfg = {
-            'root': self.root,
-            'device': self.device,
-            'ddp': False,
-            'dataset_dtype': self.dataset_dtype,
-            'resolution': self.resolution,
-        }
-
         # build val dataset
-        val_dataset = ModelNet10(fake_cfg, split='val', n=0)
+        val_dataset = ModelNet10(root=self.root, split='val', n=0, device=self.device, use_tqdm=self.use_tqdm, resolution=self.resolution, dataset_dtype=self.dataset_dtype, rank=self.rank, world_size=self.world_size, seed=self.seed)
         val_dataset.data = self.data[int(self.length * ratio):]
         val_dataset.labels = self.labels[int(self.length * ratio):]
         val_dataset.rotations = self.rotations[int(self.length * ratio):]
@@ -184,8 +194,21 @@ class ModelNet10(torch.utils.data.Dataset):
         self.rotations = self.rotations[idx]
 
 class ModelNet10Simple(ModelNet10):
-    def __init__(self, cfg, split, n=None, transform=None):
-        super().__init__(cfg, split, n, transform)
+    def __init__(
+            self, 
+            cfg, 
+            split, 
+            n=None, 
+            transform=None,
+            device='cpu',
+            use_tqdm=True,
+            resolution=128,
+            dataset_dtype='uint8',
+            rank=1,
+            world_size=1,
+            seed=42
+        ):
+        super().__init__(cfg, split, n, transform, device, use_tqdm, resolution, dataset_dtype, rank, world_size, seed)
 
     def __getitem__(self, idx):
         idx1 = np.random.randint(64)

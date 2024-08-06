@@ -1,0 +1,26 @@
+cfgs:
+  - dataset: mnist
+    experiment: iJEPA
+    trial: cls
+    model_type: iJEPA
+    use_cls_token: False
+    save: True
+    
+  - dataset: mnist
+    experiment: iJEPA
+    trial: base
+    model_type: iJEPA
+    save: True
+    
+  - dataset: mnist
+    experiment: iJEPA
+    trial: cls
+    model_type: iJEPA
+    use_cls_token: False
+    save: False
+    
+  - dataset: mnist
+    experiment: iJEPA
+    trial: base
+    model_type: iJEPA
+    save: False

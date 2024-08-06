@@ -31,8 +31,8 @@ def linear_probing(
     lr = 0.01
 
     if cfg['dataset'] == 'mnist':
-        train = MNIST(cfg, split='train', n=n_per_class)
-        val = MNIST(cfg, split='val')
+        train = MNIST(cfg['root'], split='train', n=n_per_class, device=cfg['device'], use_tqdm=cfg['local'])
+        val = MNIST(cfg['root'], split='val', device=cfg['device'], use_tqdm=cfg['local'])
 
     elif cfg['dataset'] == 'modelnet10':
         train = ModelNet10Simple(cfg, split='train', n=n_per_class)
@@ -258,12 +258,10 @@ def eval_representations(
     model: nn.Module,
     cfg: dict
 ):
-    device = torch.device(cfg['device'])
-
     if cfg['dataset'] == 'mnist':
-        test = MNIST(cfg, 'test', transform=transforms.ToTensor())
+        test = MNIST(cfg['root'], 'test', transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
     elif cfg['dataset'] == 'modelnet10':
-        test = ModelNet10(cfg, 'test')
+        test = ModelNet10(cfg['root'], 'test', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'])
 
     # dataset type is mnist for both as get() returns (x,y)
     metrics = get_rep_metrics(model, test, cfg)

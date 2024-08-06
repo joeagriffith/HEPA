@@ -1,7 +1,28 @@
+import torch.nn as nn
 import numpy as np
+import math
+
 
 
 # code sourced from https://github.com/facebookresearch/ijepa/blob/main/src/models/vision_transformer.py
+
+def interpolate_pos_embedding(x, pos_embed):
+    B, npatch, D = x.shape
+    if len(pos_embed.shape) == 2:
+        N, _ = pos_embed.shape
+    elif len(pos_embed.shape) == 3:
+        _, N, _ = pos_embed.shape
+
+    if npatch == N:
+        return pos_embed
+    dim = x.shape[-1]
+    pos_embed = nn.functional.interpolate(
+        pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
+        scale_factor=math.sqrt(npatch / N),
+        mode='bicubic',
+    )
+    pos_embed = pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+    return pos_embed
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
     """

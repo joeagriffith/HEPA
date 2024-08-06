@@ -1,6 +1,6 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as F_v2
 import torchvision.transforms as transforms
 from scipy.spatial.transform import Rotation as R
 import numpy as np
@@ -32,12 +32,12 @@ def NTXent(z:torch.Tensor, temperature:float=0.5):
     with torch.no_grad():
         numerator[~mask.bool()] = 1.0
 
-
     # calculate loss
     losses = -torch.log(numerator / denominator)
     loss = losses[mask.bool()].mean()
 
     return loss
+
 
 def smooth_l1_loss(input:torch.Tensor, target:torch.Tensor, beta:float=1.0):
     """
@@ -61,18 +61,6 @@ def negative_cosine_similarity(x1:torch.Tensor, x2:torch.Tensor):
 def cosine_schedule(base, end, T):
     return end - (end - base) * ((torch.arange(0, T, 1) * math.pi / T).cos() + 1) / 2
 
-def aug_interact(images, p):    
-    # Sample Action
-    act_p = torch.rand(5) # whether to apply each augmentation
-    angle = torch.rand(1).item() * 360 - 180 if act_p[0] < p else 0
-    translate_x = torch.randint(-8, 9, (1,)).item() if act_p[1] < p else 0
-    translate_y = torch.randint(-8, 9, (1,)).item() if act_p[2] < p else 0
-    scale = torch.rand(1).item() * 0.5 + 0.75 if act_p[3] < p else 1.0
-    shear = torch.rand(1).item() * 50 - 25 if act_p[4] < p else 0
-    images_aug = F_v2.affine(images, angle=angle, translate=(translate_x, translate_y), scale=scale, shear=shear)
-    action = torch.tensor([angle/180, translate_x/8, translate_y/8, (scale-1.0)/0.25, shear/25], dtype=torch.float32, device=images.device).unsqueeze(0).repeat(images.shape[0], 1)
-
-    return images_aug, action
 
 def aug_transform(images, *_):
     B, C, H, W = images.shape
@@ -83,7 +71,7 @@ def aug_transform(images, *_):
         transforms.Resize(H, interpolation=transforms.InterpolationMode.NEAREST),
         transforms.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.75, 1.25), shear=25),
     ])
-    return t(images), None
+    return t(images)
 
 def feature_correlation(x):
     # x: (N, C)
@@ -105,37 +93,6 @@ def feature_std(x):
     # x: (N, C)
     x = F.normalize(x, dim=1)
     return x.std(dim=0, keepdim=True).mean()
-
-def create_sine_cosine_embeddings(height, width, channels):
-    """
-    Create sine-cosine positional embeddings for the given dimensions.
-    
-    Args:
-        height (int): Height of the embedding grid.
-        width (int): Width of the embedding grid.
-        channels (int): Number of channels for the embeddings.
-        
-    Returns:
-        torch.Tensor: Sine-cosine positional embeddings.
-    """
-    assert channels % 4 == 0, "Channels must be divisible by 4 for sine-cosine embeddings."
-    
-    quarter_dim = channels // 4
-    emb_h = torch.arange(height, dtype=torch.float32)
-    emb_w = torch.arange(width, dtype=torch.float32)
-    
-    emb_h = emb_h.unsqueeze(1) / (10000 ** (torch.arange(quarter_dim, dtype=torch.float32) / quarter_dim))
-    emb_w = emb_w.unsqueeze(1) / (10000 ** (torch.arange(quarter_dim, dtype=torch.float32) / quarter_dim))
-    
-    emb_h = torch.cat((torch.sin(emb_h), torch.cos(emb_h)), dim=1)
-    emb_w = torch.cat((torch.sin(emb_w), torch.cos(emb_w)), dim=1)
-    
-    emb_h = emb_h.unsqueeze(1).repeat(1, width, 1)
-    emb_w = emb_w.unsqueeze(0).repeat(height, 1, 1)
-    
-    embeddings = torch.cat((emb_h, emb_w), dim=2).view(height * width, -1).contiguous()
-    
-    return embeddings
 
 def repeat_interleave_batch(x, B, repeat):
     N = len(x) // B

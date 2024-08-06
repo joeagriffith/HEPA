@@ -1,7 +1,7 @@
 cfgs:
 
   - dataset: modelnet10
-    experiment: hpc
+    experiment: local_delme
     trial: BYOL
     model_type: BYOL
     save: True
@@ -9,7 +9,7 @@ cfgs:
     warmup: 0
 
   - dataset: modelnet10
-    experiment: hpc
+    experiment: local_delme
     trial: iGPA
     model_type: iGPA
     save: True
@@ -17,7 +17,7 @@ cfgs:
     warmup: 0
 
   - dataset: modelnet10
-    experiment: hpc
+    experiment: local_delme
     trial: AE
     model_type: AE
     save: True

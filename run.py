@@ -3,7 +3,6 @@ import sys
 import time
 import json
 import yaml
-import platform
 
 import torch
 import torchvision.transforms as transforms
@@ -20,7 +19,7 @@ from Utils.cfg import mnist_cfg, modelnet10_cfg
 
 if __name__ == '__main__':
     start_time = time.time()
-    print(f'Start time: {start_time}')
+    print('Start time: ' + time.strftime('%H:%M:%S', time.localtime(start_time)), flush=True)
 
     # ======================== Handle configs =======================
     args = sys.argv[1:]
@@ -39,9 +38,6 @@ if __name__ == '__main__':
             cfgs.append(mnist_cfg(**yaml_cfg))
         else:
             raise ValueError(f'Dataset {yaml_cfg["dataset"]} not supported')
-    
-    cfg_time = time.time()
-    print(f'loaded cfgs, took: {cfg_time - start_time:.2f}s')
 
     # ======================== Handle devices =======================
     # DDP Code from Karpathy @ https://github.com/karpathy/build-nanogpt/blob/master/train_gpt2.py
@@ -70,7 +66,7 @@ if __name__ == '__main__':
             device = "mps"
     
     ddp_time = time.time()
-    print(f'DDP setup, took: {ddp_time - cfg_time:.2f}s')
+    print(f'start-up took: {ddp_time - start_time:.2f}s', flush=True)
 
     for (cfg, specified_cfg) in cfgs:
         cfg_start_time = time.time()
@@ -95,8 +91,7 @@ if __name__ == '__main__':
                     os.makedirs(trial_save_dir)
                 cfg['save_dir'] = trial_save_dir + str(cfg['run_no']) + '.pth'
 
-            print(f'\n======================  Dataset: {cfg["dataset"]} == Experiment: {cfg["experiment"]} == Trial: {cfg["trial"]} == Run: {cfg["run_no"]} ======================')
-            start_time = time.time()
+            print(f'\n======================  Dataset: {cfg["dataset"]} == Experiment: {cfg["experiment"]} == Trial: {cfg["trial"]} == Run: {cfg["run_no"]} ======================', flush=True)
 
         cfg['ddp'] = ddp
         cfg['ddp_rank'] = ddp_rank
@@ -106,10 +101,6 @@ if __name__ == '__main__':
 
         if cfg['device'] == 'cuda':
             torch.backends.cudnn.benchmark = True
-        
-        if master_process:
-            init_time = time.time()
-            print(f'cfg init, took: {init_time - cfg_start_time:.2f}s')
 
         # Init Model
         model = get_model(cfg)
@@ -120,10 +111,6 @@ if __name__ == '__main__':
         raw_model = model.module if ddp else model
         cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['device']))
         cfg['local'] = "PBS_JOBID" not in os.environ
-
-        if master_process:
-            model_init_time = time.time()
-            print(f'model init, took: {model_init_time - init_time:.2f}s')
 
         # Init Optimiser
         optimiser = get_optimiser(raw_model, cfg)
@@ -138,12 +125,12 @@ if __name__ == '__main__':
             writer.add_text('model', str(model).replace('\n', '<br/>').replace(' ', '&nbsp;'))
             writer.add_text('config', json.dumps(cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
             writer.add_text('specified_config', json.dumps(specified_cfg, indent=4).replace('\n', '<br/>').replace(' ', '&nbsp;'))
-        
-        if master_process:
-            optimiser_init_time = time.time()
-            print(f'dataset and optimiser init, took: {optimiser_init_time - model_init_time:.2f}s')
 
-        print(f'Training...')
+        if master_process:
+            init_time = time.time()
+            print(f'cfg init, took: {init_time - cfg_start_time:.2f}s', flush=True)
+
+        print(f'Training...', flush=True)
         if master_process and cfg['profile']:
             with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
                 train(
@@ -171,12 +158,11 @@ if __name__ == '__main__':
         if master_process:
             # linear probing
             if cfg['log']:
-                    print(f'Evaluating...')
-                    # for n in [1, 10, 100, 1000]:
-                    for n in cfg['classifier_subset_sizes']:
-                        writer = get_writer(cfg, n)
-                        linear_probing(model, writer, n, cfg)
+                print(f'Evaluating...', flush=True)
+                # for n in [1, 10, 100, 1000]:
+                for n in cfg['classifier_subset_sizes']:
+                    writer = get_writer(cfg, n)
+                    linear_probing(model, writer, n, cfg)
             else:
                 print('No logging, skipping linear probing')
-            print(f'train took: {time.time() - optimiser_init_time:.2f}s')
-            print(f'Done - Total Time taken: {time.time() - start_time:.2f}s')
+            print(f'Train took: {time.time() - cfg_start_time:.2f}s', flush=True)

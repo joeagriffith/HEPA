@@ -4,6 +4,7 @@ def mnist_cfg(
         experiment:str, 
         trial:str, 
         model_type:str, 
+        use_cls_token: bool=False,
         **kwargs
     ):
 
@@ -12,6 +13,8 @@ def mnist_cfg(
     specified_cfg['experiment'] = experiment
     specified_cfg['trial'] = trial
     specified_cfg['model_type'] = model_type
+    if model_type == 'iJEPA':
+        specified_cfg['use_cls_token'] = use_cls_token
 
     enforce_cfg = {
         'dataset': 'mnist',
@@ -23,6 +26,7 @@ def mnist_cfg(
         'backbone': 'mnist_cnn',
         'resolution': 28,
         'num_actions': 5,
+        'patch_size': 4,
         'classifier_subset_sizes': [1, 10, 100, 1000],
     }
 
@@ -32,6 +36,8 @@ def mnist_cfg(
         else:
             kwargs[key] = value
     
+    kwargs['use_cls_token'] = use_cls_token
+    
     return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
 
 def modelnet10_cfg(
@@ -40,6 +46,7 @@ def modelnet10_cfg(
         model_type:str, 
         resolution:int=128, 
         dataset_dtype:str='uint8',
+        use_cls_token: bool=False,
         **kwargs
     ):
 
@@ -50,6 +57,7 @@ def modelnet10_cfg(
     specified_cfg['model_type'] = model_type
     specified_cfg['resolution'] = resolution
     specified_cfg['dataset_dtype'] = dataset_dtype
+    specified_cfg['use_cls_token'] = use_cls_token
 
     enforce_cfg = {
         'dataset': 'modelnet10',
@@ -72,8 +80,9 @@ def modelnet10_cfg(
 
     kwargs['resolution'] = resolution
     kwargs['dataset_dtype'] = dataset_dtype
+    kwargs['use_cls_token'] = use_cls_token
     
-    return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
+    return base_cfg(experiment, trial, model_type, *kwargs), specified_cfg
 
 #=========================== base cfg initialiser ===========================
 
@@ -90,6 +99,8 @@ def base_cfg(
         backbone: str,
         resolution: int,
         num_actions: int,
+        patch_size: int,
+        use_cls_token: bool,
         **kwargs,
     ):
     cfg = {
@@ -132,8 +143,6 @@ def base_cfg(
         'flat': 0,
 
         'has_teacher': False,
-        'aug_mode': 'none',
-        'transformation_fn': None,
 
         'track_feature_corrs': True,
         'track_feature_stds': True,
@@ -150,7 +159,6 @@ def base_cfg(
     enforce_cfg = {}
     if cfg['model_type'] == 'iGPA':
         enforce_cfg['has_teacher'] = True
-        enforce_cfg['transformation_fn'] = 'interact'
 
         # iGPA specific optionals
         cfg['num_actions'] = num_actions
@@ -158,31 +166,29 @@ def base_cfg(
         cfg['start_tau'] = 0.996
         cfg['end_tau'] = 1.0
         cfg['consider_actions'] = True
-        if cfg['dataset'] == 'modelnet10':
-            cfg['aug_mode'] = 'sample'
-        elif cfg['dataset'] == 'mnist':
-            cfg['aug_mode'] = 'transform'
-        else:
-            raise ValueError(f"Dataset '{cfg['dataset']}' has no default value for 'aug_mode'.")
     
     elif cfg['model_type'] == 'BYOL':
         enforce_cfg['has_teacher'] = True
-        enforce_cfg['transformation_fn'] = 'perturb'
 
         cfg['start_tau'] = 0.996
         cfg['end_tau'] = 1.0
-        cfg['aug_mode'] = 'transform'
+
+    elif cfg['model_type'] == 'iJEPA':
+        enforce_cfg['has_teacher'] = True
+        
+        cfg['start_tau'] = 0.996
+        cfg['end_tau'] = 1.0
+        cfg['patch_size'] = patch_size
+        cfg['use_cls_token'] = use_cls_token
    
     elif cfg['model_type'] in ['AE', 'MAE', 'Supervised']:
         enforce_cfg['has_teacher'] = False
-        enforce_cfg['aug_mode'] = 'none'
 
         # class specific optionals
         cfg['data_aug'] = True
 
     elif cfg['model_type'] == 'VAE':
         enforce_cfg['has_teacher'] = False
-        enforce_cfg['aug_mode'] = 'none'
 
         # VAE specific optionals
         cfg['z_dim'] = 256 

@@ -2,14 +2,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 import os
 
-from Methods.iGPA.model import iGPA
-from Methods.BYOL.model import BYOL
-from Methods.AE.model import AE
-from Methods.MAE.model import MAE
-# from Methods.GPAViT.model import GPAViT
-# from Methods.GPAMAE.model import GPAMAE
-from Methods.VAE.model import VAE
-from Methods.Supervised.model import Supervised
+from Models import iGPA, BYOL, iJEPA, AE, VAE, MAE, Supervised
 
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -32,6 +25,14 @@ def get_model(cfg:dict):
             in_features=cfg['in_features'],
             backbone=cfg['backbone'],
             resolution=cfg['resolution'],
+        ).to(cfg['device'])
+
+    elif cfg['model_type'] == 'iJEPA':
+        return iJEPA(
+            in_features=cfg['in_features'],
+            input_size=(cfg['resolution'], cfg['resolution']),
+            patch_size=cfg['patch_size'],
+            use_cls_token=cfg['use_cls_token'],
         ).to(cfg['device'])
 
     elif cfg['model_type'] == 'AE':
@@ -105,7 +106,7 @@ def get_datasets(cfg):
         val_set = PreloadedDataset.from_dataset(val_set, None, device, use_tqdm=cfg['local'])
     
     elif cfg['dataset'] == 'modelnet10':
-        train_set = ModelNet10(cfg, 'train')
+        train_set = ModelNet10(cfg['root'], 'train', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['rank'], world_size=cfg['world_size'], seed=cfg['seed'])
         train_set, val_set = train_set.split_set(cfg['train_ratio'])
 
     return train_set, val_set
@@ -114,8 +115,8 @@ def get_datasets(cfg):
 def get_ss_datasets(cfg):
     device = torch.device(cfg['device'])
     if cfg['dataset'] == 'mnist':
-        ss_train_dataset = MNIST(cfg, split='train', n=1, transform=transforms.ToTensor())
-        ss_val_dataset = MNIST(cfg, split='val', transform=transforms.ToTensor())
+        ss_train_dataset = MNIST(cfg['root'], split='train', n=1, transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
+        ss_val_dataset = MNIST(cfg['root'], split='val', transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
     elif cfg['dataset'] == 'modelnet10':
         ss_train_dataset = ModelNet10Simple(cfg, split='train', n=10, transform=None)
         ss_val_dataset = ModelNet10Simple(cfg, split='val', n=10, transform=None)

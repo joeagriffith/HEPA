@@ -51,8 +51,7 @@ class MaskGenerator(object):
 
     def __init__(
         self,
-        input_size=(224, 224),
-        patch_size=16,
+        input_size=(16,16),
         enc_mask_scale=(0.85, 1.0),
         pred_mask_scale=(0.15, 0.2),
         enc_aspect_ratio=(1.0, 1.0),
@@ -60,13 +59,13 @@ class MaskGenerator(object):
         nenc=1,
         npred=4,
         min_keep=4,
-        allow_overlap=False
+        allow_overlap=False,
+        device='cpu'
     ):
         super().__init__()
-        if not isinstance(input_size, tuple):
+        if isinstance(input_size, int):
             input_size = (input_size, ) * 2
-        self.patch_size = patch_size
-        self.height, self.width = input_size[0] // patch_size, input_size[1] // patch_size
+        self.height, self.width = input_size[0], input_size[1]
         self.enc_mask_scale = enc_mask_scale
         self.pred_mask_scale = pred_mask_scale
         self.enc_aspect_ratio = enc_aspect_ratio
@@ -75,6 +74,11 @@ class MaskGenerator(object):
         self.npred = npred
         self.min_keep = min_keep  # minimum number of patches to keep
         self.allow_overlap = allow_overlap  # whether to allow overlap b/w enc and pred masks
+        self.device = device
+    
+    def to(self, device):
+        self.device = device
+        return self
 
     def _sample_block_size(self, scale, aspect_ratio_scale):
         _rand = torch.rand(2)
@@ -112,7 +116,7 @@ class MaskGenerator(object):
             # -- Sample block top-left corner
             top = torch.randint(0, self.height - h + 1, (1,))
             left = torch.randint(0, self.width - w + 1, (1,))
-            mask = torch.zeros((self.height, self.width), dtype=torch.int32)
+            mask = torch.zeros((self.height, self.width), dtype=torch.int32, device=self.device)
             mask[top:top+h, left:left+w] = 1
             # -- Constrain mask to a set of acceptable regions
             if acceptable_regions is not None:
@@ -128,7 +132,7 @@ class MaskGenerator(object):
                     logger.warning(f'Mask generator says: "Valid mask not found, decreasing acceptable-regions [{tries}]"')
         mask = mask.squeeze()
         # --
-        mask_complement = torch.ones((self.height, self.width), dtype=torch.int32)
+        mask_complement = torch.ones((self.height, self.width), dtype=torch.int32, device=self.device)
         mask_complement[top:top+h, left:left+w] = 0
         # --
         return mask, mask_complement

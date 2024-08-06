@@ -9,11 +9,25 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 
-def MNIST(cfg, split, n=None, transform=None):
+def MNIST(
+        root, 
+        split, 
+        n=None, 
+        transform=None, 
+        device='cpu', 
+        use_tqdm=True, 
+        resolution=28, 
+        dataset_dtype='float32', 
+        rank=1, 
+        world_size=1, 
+        seed=42
+    ):
     # Load data
     assert split in ['train', 'val', 'test']
-    device = cfg['device']
-    root = cfg['root']
+    assert world_size == 1, 'ddp not implemented for MNIST'
+    assert resolution == 28, 'resolution must be 28 for MNIST'
+    assert dataset_dtype == 'float32', 'dataset_dtype must be float32 for MNIST'
+
     train = split in ['train', 'val']
     dataset = datasets.MNIST(root=root, train=train, transform=transforms.ToTensor(), download=True)
     if transform is None:
@@ -22,7 +36,7 @@ def MNIST(cfg, split, n=None, transform=None):
     if split == 'train':
         # Build train dataset
         dataset = torch.utils.data.Subset(dataset, range(0, len(dataset) - 10000))
-        dataset = PreloadedDataset.from_dataset(dataset, transform, device, cfg['local'])
+        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm)
         if n is not None:
             train_indices = []
             for i in range(10):
@@ -38,11 +52,11 @@ def MNIST(cfg, split, n=None, transform=None):
         if n is not None:
             raise NotImplementedError('n not implemented for val_set')
         dataset = torch.utils.data.Subset(dataset, range(len(dataset) - 10000, len(dataset)))
-        dataset = PreloadedDataset.from_dataset(dataset, transforms.ToTensor(), device, cfg['local'])
+        dataset = PreloadedDataset.from_dataset(dataset, transforms.ToTensor(), device, use_tqdm)
     
     elif split == 'test':
         if n is not None:
             raise NotImplementedError('n not implemented for test_set')
-        dataset = PreloadedDataset.from_dataset(dataset, transform, device, cfg['local'])
+        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm)
 
     return dataset
