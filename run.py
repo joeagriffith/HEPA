@@ -68,6 +68,7 @@ if __name__ == '__main__':
     ddp_time = time.time()
     print(f'start-up took: {ddp_time - start_time:.2f}s', flush=True)
 
+    # ======================== Run experiments =======================
     for (cfg, specified_cfg) in cfgs:
         cfg_start_time = time.time()
 
@@ -75,6 +76,8 @@ if __name__ == '__main__':
             cfg_start_time = time.time()
             assert cfg['device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
 
+        if cfg['seed'] == -1:
+            cfg['seed'] = torch.randint(0, 1000000000, (1,)).item()
         torch.manual_seed(cfg['seed'])
         if torch.cuda.is_available():
             torch.cuda.manual_seed(cfg['seed'])
@@ -154,6 +157,9 @@ if __name__ == '__main__':
                 writer=writer,
                 cfg=cfg,
             )
+        if master_process:
+            train_time = time.time()
+            print(f'Train took: {train_time - cfg_start_time:.2f}s', flush=True)
 
         if master_process:
             # linear probing
@@ -165,4 +171,5 @@ if __name__ == '__main__':
                     linear_probing(model, writer, n, cfg)
             else:
                 print('No logging, skipping linear probing')
-            print(f'Train took: {time.time() - cfg_start_time:.2f}s', flush=True)
+            eval_time = time.time()
+            print(f'Eval took: {eval_time - train_time:.2f}s', flush=True)

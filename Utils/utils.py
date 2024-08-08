@@ -16,14 +16,12 @@ def get_model(cfg:dict):
             in_features=cfg['in_features'],
             num_actions=cfg['num_actions'],
             stop_at=cfg['stop_at'],
-            backbone=cfg['backbone'],
             resolution=cfg['resolution'],
         ).to(cfg['device'])
 
     elif cfg['model_type'] == 'BYOL':
         return BYOL(
             in_features=cfg['in_features'],
-            backbone=cfg['backbone'],
             resolution=cfg['resolution'],
         ).to(cfg['device'])
 
@@ -32,13 +30,11 @@ def get_model(cfg:dict):
             in_features=cfg['in_features'],
             input_size=(cfg['resolution'], cfg['resolution']),
             patch_size=cfg['patch_size'],
-            use_cls_token=cfg['use_cls_token'],
         ).to(cfg['device'])
 
     elif cfg['model_type'] == 'AE':
         return AE(
             in_features=cfg['in_features'],
-            backbone=cfg['backbone'],
             resolution=cfg['resolution'],
         ).to(cfg['device'])
 
@@ -46,7 +42,6 @@ def get_model(cfg:dict):
         return VAE(
             in_features=cfg['in_features'],
             z_dim=cfg['z_dim'],
-            backbone=cfg['backbone'],
             resolution=cfg['resolution'],
         ).to(cfg['device'])
 
@@ -59,7 +54,6 @@ def get_model(cfg:dict):
     elif cfg['model_type'] == 'Supervised':
         return Supervised(
             in_features=cfg['in_features'],
-            backbone=cfg['backbone'],
             resolution=cfg['resolution'],
         ).to(cfg['device'])
 
@@ -68,8 +62,8 @@ def get_model(cfg:dict):
 
 def get_optimiser(model, cfg):
     # placeholder values, actually set in train.py
-    tmp_lr = 9999.9
-    tmp_wd = 9999.9
+    tmp_lr = 3e-4
+    tmp_wd = 0.02
 
     non_decay_parameters = []
     decay_parameters = []   
@@ -95,9 +89,8 @@ def get_datasets(cfg):
     if cfg['dataset'] == 'mnist':
         dataset = datasets.MNIST(root=cfg['root'], train=True, transform=transforms.ToTensor(), download=True)
 
-
-        VAL_RATIO = 0.2
-        n_val = int(len(dataset) * VAL_RATIO)
+        val_ratio = 1.0 - cfg['train_ratio']
+        n_val = round(len(dataset) * val_ratio)
         n_train = len(dataset) - n_val
         train_set, val_set = torch.utils.data.random_split(dataset, [n_train, n_val])
 

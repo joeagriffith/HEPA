@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torchvision.models.vision_transformer import ConvStemConfig, EncoderBlock, VisionTransformer
 from Utils.nn.parts import EncBlock, DecBlock, ConvResidualBlock, SelfAttentionBlock, TransformerEncoderBottleneck, TransformerDecoderBottleneck
 
-class mnist_cnn_encoder(nn.Module):
+class Encoder28(nn.Module):
     def __init__(self, num_features):
         super().__init__()
         self.enc_blocks = nn.ModuleList([
@@ -21,29 +21,81 @@ class mnist_cnn_encoder(nn.Module):
             EncBlock(256, num_features, 3, 1, 0, bn=False),
         ])
     
-    def forward(self, x):
-        for block in self.enc_blocks:
-            x = block(x)
-        return x.flatten(1)
+    def forward(self, x, stop_at=-1):
 
-class mnist_cnn_decoder(nn.Module):
+        for i, block in enumerate(self.enc_blocks):
+            if i == stop_at:
+                break
+            x = block(x)
+        
+        if x.shape[2] == 1:
+            x = x.flatten(1)
+        return x
+
+class Decoder1(nn.Module):
     def __init__(self, num_features):
         super().__init__()
         self.num_features = num_features
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(num_features, 256, 3, 1),
+            nn.Linear(num_features, num_features*2),
+            nn.ReLU(),
+            nn.Linear(num_features*2, num_features*2),
+            nn.ReLU(),
+            nn.Linear(num_features*2, num_features*2),
+            nn.ReLU(),
+            nn.Linear(num_features*2, num_features*2),
+            nn.ReLU(),
+            nn.Linear(num_features*2, num_features),
+        )
+
+    def forward(self, x):
+        return self.decoder(x)
+
+class Decoder5(nn.Module):
+    def __init__(self, num_features, out_features=128):
+        super().__init__()
+        self.num_features = num_features
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(num_features, max(256, out_features), 2, 1),
             nn.ReLU(),
 
-            nn.ConvTranspose2d(256, 128, 3, 3),
+            nn.ConvTranspose2d(max(256, out_features), max(128, out_features), 3, 1),
             nn.ReLU(),
             
-            nn.ConvTranspose2d(128, 64, 3, 3),
+            nn.ConvTranspose2d(max(128, out_features), max(64, out_features), 2, 1),
             nn.ReLU(),
             
-            nn.ConvTranspose2d(64, 32, 2, 1),
+            nn.ConvTranspose2d(max(64, out_features), max(32, out_features), 3, 1, 1),
+
             nn.ReLU(),
-            nn.Conv2d(32, 1, 3, 1, 1),
+            nn.Conv2d(max(32, out_features), out_features, 3, 1, 1),
+        )
+
+    def forward(self, z):
+        z = z.view(-1, self.num_features, 1, 1)
+        return self.decoder(z)
+
+class Decoder28(nn.Module):
+    def __init__(self, num_features, out_features=1):
+        super().__init__()
+        self.num_features = num_features
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(num_features, max(256, out_features), 3, 1),
+            nn.ReLU(),
+
+            nn.ConvTranspose2d(max(256, out_features), max(128, out_features), 3, 3),
+            nn.ReLU(),
+            
+            nn.ConvTranspose2d(max(128, out_features), max(64, out_features), 3, 3),
+            nn.ReLU(),
+            
+            nn.ConvTranspose2d(max(64, out_features), max(32, out_features), 2, 1),
+
+            nn.ReLU(),
+            nn.Conv2d(max(32, out_features), out_features, 3, 1, 1),
         )
 
     def forward(self, z):

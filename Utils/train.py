@@ -6,8 +6,7 @@ from Utils.functional import cosine_schedule
 from Utils.evals import one_step_linear_probing, eval_representations, get_rep_metrics
 from Utils.functional import quaternion_delta, axis_angle
 from Utils.utils import get_ss_datasets
-
-import os
+import pprint
 
 def train(
         model,
@@ -19,6 +18,7 @@ def train(
 ):
 
     device = cfg['device'] + ':' + str(cfg['ddp_rank'])
+    pprint.pprint(cfg)
 
 #============================== Online Model Learning Parameters ==============================
     # LR schedule, warmup then cosine
@@ -43,6 +43,7 @@ def train(
     if cfg['has_teacher']:
         # Initialise target model
         teacher = model.copy()
+        teacher.eval()
         # EMA schedule, cosine
         taus = cosine_schedule(cfg['start_tau'], cfg['end_tau'], cfg['num_epochs'])
     else:
@@ -68,9 +69,6 @@ def train(
     for epoch in range(cfg['num_epochs']):
         model.train()
 
-        if teacher:
-            teacher.train()
-
         train_dataset.apply_transform(batch_size=cfg['batch_size'])
 
         # Update lr
@@ -80,7 +78,7 @@ def train(
         for param_group in optimiser.param_groups:
             if param_group['weight_decay'] != 0:
                 param_group['weight_decay'] = wds[epoch].item()
-
+        
         # Training Pass
         epoch_train_losses = torch.zeros(len(train_loader), device=device)
         epoch_train_norms = torch.zeros(len(train_loader), device=device)
@@ -122,7 +120,7 @@ def train(
         
             loss.backward()
 
-            epoch_train_norms[i] = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0).detach()
+            epoch_train_norms[i] = torch.norm(torch.stack([torch.norm(p.grad) for p in model.parameters() if p.grad is not None]), 2).detach()
 
             optimiser.step()
 
@@ -138,8 +136,6 @@ def train(
 
         # Validation Pass
         model.eval()
-        if cfg['has_teacher']:
-            teacher.eval()
         with torch.no_grad():
             epoch_val_losses = torch.zeros(len(val_loader), device=device)
             for i, data in enumerate(val_loader):

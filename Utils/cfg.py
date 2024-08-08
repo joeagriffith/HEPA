@@ -4,7 +4,6 @@ def mnist_cfg(
         experiment:str, 
         trial:str, 
         model_type:str, 
-        use_cls_token: bool=False,
         **kwargs
     ):
 
@@ -13,8 +12,6 @@ def mnist_cfg(
     specified_cfg['experiment'] = experiment
     specified_cfg['trial'] = trial
     specified_cfg['model_type'] = model_type
-    if model_type == 'iJEPA':
-        specified_cfg['use_cls_token'] = use_cls_token
 
     enforce_cfg = {
         'dataset': 'mnist',
@@ -23,7 +20,6 @@ def mnist_cfg(
         'save_dir': 'out/MNIST/models/',
         'batch_size': 256,
         'in_features': 1,
-        'backbone': 'mnist_cnn',
         'resolution': 28,
         'num_actions': 5,
         'patch_size': 4,
@@ -36,8 +32,6 @@ def mnist_cfg(
         else:
             kwargs[key] = value
     
-    kwargs['use_cls_token'] = use_cls_token
-    
     return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
 
 def modelnet10_cfg(
@@ -46,7 +40,6 @@ def modelnet10_cfg(
         model_type:str, 
         resolution:int=128, 
         dataset_dtype:str='uint8',
-        use_cls_token: bool=False,
         **kwargs
     ):
 
@@ -57,7 +50,6 @@ def modelnet10_cfg(
     specified_cfg['model_type'] = model_type
     specified_cfg['resolution'] = resolution
     specified_cfg['dataset_dtype'] = dataset_dtype
-    specified_cfg['use_cls_token'] = use_cls_token
 
     enforce_cfg = {
         'dataset': 'modelnet10',
@@ -66,8 +58,6 @@ def modelnet10_cfg(
         'save_dir': 'out/ModelNet10/models/',
         'batch_size': 128,
         'in_features': 1,
-        'backbone': 'resnet18',
-        # 'num_actions': 3,
         'num_actions': 4,
         'classifier_subset_sizes': [1, 10, 50],
     }
@@ -80,7 +70,6 @@ def modelnet10_cfg(
 
     kwargs['resolution'] = resolution
     kwargs['dataset_dtype'] = dataset_dtype
-    kwargs['use_cls_token'] = use_cls_token
     
     return base_cfg(experiment, trial, model_type, *kwargs), specified_cfg
 
@@ -96,11 +85,9 @@ def base_cfg(
         save_dir:str,
         batch_size:int,
         in_features: int,
-        backbone: str,
         resolution: int,
         num_actions: int,
         patch_size: int,
-        use_cls_token: bool,
         **kwargs,
     ):
     cfg = {
@@ -108,7 +95,7 @@ def base_cfg(
         'trial': trial,
         'device': 'cuda',
         'use_compile': False,
-        'seed': 42,
+        'seed': -1,
         'local': True,
         'profile': False,
 
@@ -123,7 +110,6 @@ def base_cfg(
 
         'model_type': model_type,
         'in_features': in_features,
-        'backbone': backbone,
 
         'log': True,
         'save': True,
@@ -179,7 +165,6 @@ def base_cfg(
         cfg['start_tau'] = 0.996
         cfg['end_tau'] = 1.0
         cfg['patch_size'] = patch_size
-        cfg['use_cls_token'] = use_cls_token
    
     elif cfg['model_type'] in ['AE', 'MAE', 'Supervised']:
         enforce_cfg['has_teacher'] = False
@@ -205,5 +190,11 @@ def base_cfg(
         if key not in cfg:
             raise ValueError(f"'{key}' is not a valid configuration parameter.")
         cfg[key] = value
-    
+
+
+    # Conditionals
+    if cfg['model_type'] == 'iGPA':
+        if cfg['stop_at'] == 0:
+            cfg['has_teacher'] = False
+
     return cfg
