@@ -123,14 +123,14 @@ class MaskGenerator(object):
                 constrain_mask(mask, tries)
             mask = torch.nonzero(mask.flatten())
             # -- If mask too small try again
-            valid_mask = len(mask) > self.min_keep
+            valid_mask = len(mask) >= self.min_keep
             if not valid_mask:
                 timeout -= 1
                 if timeout == 0:
                     tries += 1
                     timeout = og_timeout
                     logger.warning(f'Mask generator says: "Valid mask not found, decreasing acceptable-regions [{tries}]"')
-        mask = mask.squeeze()
+        mask = mask.squeeze(1)
         # --
         mask_complement = torch.ones((self.height, self.width), dtype=torch.int32, device=self.device)
         mask_complement[top:top+h, left:left+w] = 0

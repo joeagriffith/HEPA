@@ -2,7 +2,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 import os
 
-from Models import iGPA, BYOL, iJEPA, AE, VAE, MAE, Supervised
+from Models import iGPA, BYOL, BYOPL, iJEPA, AE, VAE, MAE, Supervised
 
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -17,6 +17,8 @@ def get_model(cfg:dict):
             num_actions=cfg['num_actions'],
             stop_at=cfg['stop_at'],
             resolution=cfg['resolution'],
+            p=cfg['p'],
+            consider_actions=cfg['consider_actions']
         ).to(cfg['device'])
 
     elif cfg['model_type'] == 'BYOL':
@@ -24,12 +26,22 @@ def get_model(cfg:dict):
             in_features=cfg['in_features'],
             resolution=cfg['resolution'],
         ).to(cfg['device'])
+    
+    elif cfg['model_type'] == 'BYOPL':
+        return BYOPL(
+            in_features=cfg['in_features'],
+            num_actions=cfg['num_actions'],
+            resolution=cfg['resolution'],
+            p=cfg['p'],
+            consider_actions=cfg['consider_actions']
+        ).to(cfg['device'])
 
     elif cfg['model_type'] == 'iJEPA':
         return iJEPA(
             in_features=cfg['in_features'],
             input_size=(cfg['resolution'], cfg['resolution']),
             patch_size=cfg['patch_size'],
+            min_keep=cfg['min_keep'],
         ).to(cfg['device'])
 
     elif cfg['model_type'] == 'AE':
@@ -62,8 +74,8 @@ def get_model(cfg:dict):
 
 def get_optimiser(model, cfg):
     # placeholder values, actually set in train.py
-    tmp_lr = 3e-4
-    tmp_wd = 0.02
+    tmp_lr = 0.01
+    tmp_wd = 0.002
 
     non_decay_parameters = []
     decay_parameters = []   
@@ -97,9 +109,9 @@ def get_datasets(cfg):
         device = torch.device(cfg['device'])
         train_set = PreloadedDataset.from_dataset(train_set, None, device, use_tqdm=cfg['local'])
         val_set = PreloadedDataset.from_dataset(val_set, None, device, use_tqdm=cfg['local'])
-    
+
     elif cfg['dataset'] == 'modelnet10':
-        train_set = ModelNet10(cfg['root'], 'train', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['rank'], world_size=cfg['world_size'], seed=cfg['seed'])
+        train_set = ModelNet10(cfg['root'], 'train', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
         train_set, val_set = train_set.split_set(cfg['train_ratio'])
 
     return train_set, val_set
@@ -111,8 +123,8 @@ def get_ss_datasets(cfg):
         ss_train_dataset = MNIST(cfg['root'], split='train', n=1, transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
         ss_val_dataset = MNIST(cfg['root'], split='val', transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
     elif cfg['dataset'] == 'modelnet10':
-        ss_train_dataset = ModelNet10Simple(cfg, split='train', n=10, transform=None)
-        ss_val_dataset = ModelNet10Simple(cfg, split='val', n=10, transform=None)
+        ss_train_dataset = ModelNet10Simple(cfg['root'], 'train', n=10, transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        ss_val_dataset = ModelNet10Simple(cfg['root'], 'val', n=10, transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
     else:
         raise ValueError(f'Dataset {cfg["dataset"]} not implemented')
     
@@ -121,13 +133,18 @@ def get_ss_datasets(cfg):
 
 def get_writer(cfg, n=None):
     if n is None:
-        trial_log_dir = cfg['log_dir'] + f'{cfg["experiment"]}/Encoder/{cfg["trial"]}'
+        trial_log_dir = cfg['log_dir'] + f'raw/{cfg["experiment"]}/Encoder/{cfg["trial"]}'
+        agg_log_dir = cfg['log_dir'] + f'agg/{cfg["experiment"]}/Encoder/{cfg["trial"]}'
     else:
-        trial_log_dir = cfg['log_dir'] + f'{cfg["experiment"]}/Classifier-n{n}/{cfg["trial"]}'
+        trial_log_dir = cfg['log_dir'] + f'raw/{cfg["experiment"]}/Classifier-n{n}/{cfg["trial"]}'
+        agg_log_dir = cfg['log_dir'] + f'agg/{cfg["experiment"]}/Classifier-n{n}/{cfg["trial"]}'
 
     # remove aggregation as it needs to be recalculated with this run.
     if os.path.exists(trial_log_dir + '/reduction.csv'):
         os.remove(trial_log_dir + '/reduction.csv')
+    if os.path.exists(agg_log_dir):
+        for f in os.listdir(agg_log_dir):
+            os.remove(agg_log_dir + '/' + f)
 
     if 'run_no' not in cfg.keys():
         run_no = 0

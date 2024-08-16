@@ -7,6 +7,7 @@ import math
 from functools import partial
 from typing import Callable
 from collections import OrderedDict
+from flash_attn.modules.mha import MHA
 
 from Utils.pos_embed import get_2d_sincos_pos_embed
 

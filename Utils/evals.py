@@ -23,23 +23,28 @@ def linear_probing(
 
     # Create classifier and specify training parameters
     classifier = nn.Sequential(
-        # nn.BatchNorm1d(model.num_features, affine=False),
+        nn.BatchNorm1d(model.num_features, affine=False) if cfg['bn_output'] else nn.Identity(),
         nn.Linear(model.num_features, 10, bias=False),
     ).to(device)
     batch_size = max(n_per_class, 10)
-    num_epochs = 100
-    lr = 0.01
+    num_epochs = 100 if cfg['dataset'] == 'mnist' else 200
+    lr = 0.1
 
     if cfg['dataset'] == 'mnist':
         train = MNIST(cfg['root'], split='train', n=n_per_class, device=cfg['device'], use_tqdm=cfg['local'])
         val = MNIST(cfg['root'], split='val', device=cfg['device'], use_tqdm=cfg['local'])
 
     elif cfg['dataset'] == 'modelnet10':
-        train = ModelNet10Simple(cfg, split='train', n=n_per_class)
-        val = ModelNet10Simple(cfg, split='val', n=10)
+        train = ModelNet10Simple(cfg['root'], split='train', n=n_per_class, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        val = ModelNet10Simple(cfg['root'], split='val', n=10, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
 
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val, batch_size=1000, shuffle=False)
+
+    param_dict = {pn: p for pn, p in classifier.named_parameters()}
+    param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+    decay_params = [p for n, p in param_dict.items() if 'bn' not in n and 'bias' not in n]
+    nondecay_params = [p for n, p in param_dict.items() if 'bn' in n or 'bias' in n]
 
     if finetune:
         encoder = model.copy()
@@ -47,22 +52,20 @@ def linear_probing(
         
         param_dict = {pn: p for pn, p in encoder.named_parameters()}
         param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
-
-        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-        nondecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
-        optim_groups = [
-            {'params': decay_params, 'weight_decay': 0.01}, 
-            {'params': nondecay_params, 'weight_decay': 0.0},
-            {'params': classifier.parameters(), 'weight_decay': 0.0}
-        ]
+        decay_params = decay_params + [p for n, p in param_dict.items() if 'bn' not in n and 'bias' not in n]
+        nondecay_params = nondecay_params + [p for n, p in param_dict.items() if 'bn' in n or 'bias' in n]
     else:
         encoder = model
         encoder.eval()
-        optim_groups = [
-            {'params': classifier.parameters(), 'weight_decay': 0.0}
-        ]
+
+    optim_groups = [
+        {'params': decay_params, 'weight_decay': 0.005}, 
+        {'params': nondecay_params, 'weight_decay': 0.0},
+    ]
 
     optimiser = torch.optim.AdamW(optim_groups, lr=lr)
+    sched_step_size = 30 if cfg['dataset'] == 'mnist' else 60
+    scheduler = torch.optim.lr_scheduler.StepLR(optimiser, step_size=sched_step_size, gamma=0.1) 
 
     last_train_loss = torch.tensor(-1, device=device)
     last_train_acc = torch.tensor(-1, device=device)
@@ -104,6 +107,8 @@ def linear_probing(
 
         last_train_loss = epoch_train_loss.mean()
         last_train_acc = epoch_train_acc.mean()
+
+        scheduler.step()
         
         with torch.no_grad():
             classifier.eval()
@@ -149,7 +154,7 @@ def linear_probing(
     if cfg['dataset'] == 'mnist':
         t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)
     elif cfg['dataset'] == 'modelnet10':
-        t_dataset = ModelNet10Simple(cfg, split='test')
+        t_dataset = ModelNet10Simple(cfg['root'], split='test', device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
     test = PreloadedDataset.from_dataset(t_dataset, transforms.ToTensor(), device, use_tqdm=cfg['local'])
     test_loader = DataLoader(test, batch_size=100, shuffle=False)
 
@@ -169,6 +174,7 @@ def linear_probing(
             writer.add_scalar('test/finetuning_accuracy', test_acc)
         else:
             writer.add_scalar('test/accuracy', test_acc)
+    print(f'N: {n_per_class} - Test accuracy: {test_acc}')
 
 def one_step_linear_probing(
         encoder,

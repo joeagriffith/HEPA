@@ -1,6 +1,7 @@
 cfgs:
   - dataset: mnist
-    experiment: comparison
-    trial: iGPA_double-precision
+    experiment: iJEPA_cnn
+    trial: iGPA
     model_type: iGPA
     save: False
+    stop_at: 0

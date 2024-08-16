@@ -1,12 +1,52 @@
 import torch
 import torch.nn as nn
-from torchvision.models.vision_transformer import EncoderBlock
+from torchvision.models.vision_transformer import MLPBlock, EncoderBlock
+from torchvision.ops import MLP
+from flash_attn import flash_attn_qkvpacked_func
 
 from typing import Callable
 from functools import partial
 from collections import OrderedDict
+from flash_attn.modules.mha import MHA
 
 from Utils.pos_embed import get_2d_sincos_pos_embed, interpolate_pos_embedding
+
+class EncoderBlock(nn.Module):
+    """Transformer encoder block."""
+
+    def __init__(
+        self,
+        num_heads: int,
+        hidden_dim: int,
+        mlp_dim: int,
+        dropout: float,
+        attention_dropout: float,
+        norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
+    ):
+        super().__init__()
+        self.num_heads = num_heads
+
+        # Attention block
+        self.ln_1 = norm_layer(hidden_dim)
+        # self.self_attention = MultiheadAttention(hidden_dim, num_heads, dropout=attention_dropout, batch_first=True)
+        self.self_attention = MHA(hidden_dim, num_heads, dropout=attention_dropout, use_flash_attn=True)
+        self.dropout = nn.Dropout(dropout)
+
+        # MLP block
+        self.ln_2 = norm_layer(hidden_dim)
+        self.mlp = MLPBlock(hidden_dim, mlp_dim, dropout)
+
+    def forward(self, input: torch.Tensor):
+        torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
+        x = self.ln_1(input)
+        # x, _ = self.self_attention(x, need_weights=False)
+        x = self.self_attention(x)
+        x = self.dropout(x)
+        x = x + input
+
+        y = self.ln_2(x)
+        y = self.mlp(y)
+        return x + y
 
 class Transformer(nn.Module):
 

@@ -1,0 +1,37 @@
+cfgs:
+  - dataset: mnist
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: True
+
+  - dataset: mnist
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+
+  - dataset: mnist
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+
+  - dataset: mnist
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+
+  - dataset: mnist
+    experiment: comparison
+    trial: BYOL
+    model_type: BYOL
+    save: False
+
+  - dataset: modelnet10
+    experiment: action_ablation
+    trial: JE
+    model_type: iGPA
+    save: True
+    consider_actions: False

@@ -61,7 +61,6 @@ def negative_cosine_similarity(x1:torch.Tensor, x2:torch.Tensor):
 def cosine_schedule(base, end, T):
     return end - (end - base) * ((torch.arange(0, T, 1) * math.pi / T).cos() + 1) / 2
 
-
 def aug_transform(images, *_):
     B, C, H, W = images.shape
 

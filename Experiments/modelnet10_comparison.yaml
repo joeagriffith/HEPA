@@ -2,105 +2,124 @@ cfgs:
 
   - dataset: modelnet10
     experiment: comparison
-    trial: BYOL
-    model_type: BYOL
+    trial: BYOPL_no_actions
+    model_type: BYOPL
     save: True
-    num_epochs: 500
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
-    trial: iGPA
+    trial: BYOPL
+    model_type: BYOPL
+    save: True
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA_no_actions
     model_type: iGPA
     save: True
-    num_epochs: 500
-
-  - dataset: modelnet10
-    experiment: comparison
-    trial: AE
-    model_type: AE
-    save: True
-    num_epochs: 500
-
-  - dataset: modelnet10
-    experiment: comparison
-    trial: BYOL
-    model_type: BYOL
-    save: False
-    num_epochs: 500
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
     trial: iGPA
     model_type: iGPA
     save: False
-    num_epochs: 500
 
   - dataset: modelnet10
     experiment: comparison
-    trial: AE
-    model_type: AE
+    trial: iGPA_no_actions
+    model_type: iGPA
     save: False
-    num_epochs: 500
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
-    trial: BYOL
-    model_type: BYOL
+    trial: BYOPL
+    model_type: BYOPL
     save: False
-    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOPL_no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
     trial: iGPA
     model_type: iGPA
     save: False
-    num_epochs: 500
 
   - dataset: modelnet10
     experiment: comparison
-    trial: AE
-    model_type: AE
+    trial: iGPA_no_actions
+    model_type: iGPA
     save: False
-    num_epochs: 500
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
-    trial: BYOL
-    model_type: BYOL
+    trial: BYOPL
+    model_type: BYOPL
     save: False
-    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOPL_no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
     trial: iGPA
     model_type: iGPA
     save: False
-    num_epochs: 500
 
   - dataset: modelnet10
     experiment: comparison
-    trial: AE
-    model_type: AE
+    trial: iGPA_no_actions
+    model_type: iGPA
     save: False
-    num_epochs: 500
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
-    trial: BYOL
-    model_type: BYOL
+    trial: BYOPL
+    model_type: BYOPL
     save: False
-    num_epochs: 500
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOPL_no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False
 
   - dataset: modelnet10
     experiment: comparison
     trial: iGPA
     model_type: iGPA
     save: False
-    num_epochs: 500
 
   - dataset: modelnet10
     experiment: comparison
-    trial: AE
-    model_type: AE
+    trial: iGPA_no_actions
+    model_type: iGPA
     save: False
-    num_epochs: 500
+    consider_actions: False
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOPL
+    model_type: BYOPL
+    save: False
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: BYOPL_no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False

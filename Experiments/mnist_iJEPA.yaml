@@ -1,7 +1,36 @@
 cfgs:
-  - dataset: mnist
-    experiment: iJEPA
-    trial: cls
-    model_type: iJEPA
-    use_cls_token: True
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
     save: True
+
+  - dataset: mnist
+    experiment: comparison
+    trial: iJEPA
+    model_type: iJEPA
+    save: False
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False
+
+  - dataset: modelnet10
+    experiment: comparison
+    trial: iGPA
+    model_type: iGPA
+    save: False

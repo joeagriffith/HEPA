@@ -1,0 +1,52 @@
+cfgs:
+
+  - dataset: mnist
+    experiment: delme
+    trial: no_actions
+    model_type: BYOPL
+    save: False
+
+  - dataset: mnist
+    experiment: BYOPL
+    trial: no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False
+
+  - dataset: mnist
+    experiment: BYOPL
+    trial: no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False
+
+  - dataset: mnist
+    experiment: BYOPL
+    trial: no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False
+
+  - dataset: mnist
+    experiment: BYOPL
+    trial: base
+    model_type: BYOPL
+    save: False
+
+  - dataset: mnist
+    experiment: BYOPL
+    trial: base
+    model_type: BYOPL
+    save: False
+
+  - dataset: mnist
+    experiment: BYOPL
+    trial: base
+    model_type: BYOPL
+    save: False
+
+  - dataset: mnist
+    experiment: BYOPL
+    trial: base
+    model_type: BYOPL
+    save: False

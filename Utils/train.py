@@ -6,7 +6,6 @@ from Utils.functional import cosine_schedule
 from Utils.evals import one_step_linear_probing, eval_representations, get_rep_metrics
 from Utils.functional import quaternion_delta, axis_angle
 from Utils.utils import get_ss_datasets
-import pprint
 
 def train(
         model,
@@ -18,7 +17,6 @@ def train(
 ):
 
     device = cfg['device'] + ':' + str(cfg['ddp_rank'])
-    pprint.pprint(cfg)
 
 #============================== Online Model Learning Parameters ==============================
     # LR schedule, warmup then cosine
@@ -43,7 +41,6 @@ def train(
     if cfg['has_teacher']:
         # Initialise target model
         teacher = model.copy()
-        teacher.eval()
         # EMA schedule, cosine
         taus = cosine_schedule(cfg['start_tau'], cfg['end_tau'], cfg['num_epochs'])
     else:
@@ -62,20 +59,21 @@ def train(
     # Initialise training variables
     last_train_loss = -1
     last_val_loss = -1
-    best_val_loss = float('inf')
+    # best_val_loss = float('inf')
+    best_ss_val_acc = -1
     postfix = {}
 
 # ============================== Training Loop ==============================
     for epoch in range(cfg['num_epochs']):
         model.train()
+        if cfg['has_teacher']:
+            teacher.train()
 
         train_dataset.apply_transform(batch_size=cfg['batch_size'])
 
-        # Update lr
+        # Update lr and wd
         for param_group in optimiser.param_groups:
             param_group['lr'] = lrs[epoch].item()
-        # Update wd
-        for param_group in optimiser.param_groups:
             if param_group['weight_decay'] != 0:
                 param_group['weight_decay'] = wds[epoch].item()
         
@@ -110,7 +108,7 @@ def train(
                 if actions is not None:
                     actions = actions.to(device)
 
-            loss = model.train_step(
+            loss = model.loss(
                 img1=images1, 
                 img2=images2, 
                 actions=actions, 
@@ -136,6 +134,8 @@ def train(
 
         # Validation Pass
         model.eval()
+        if cfg['has_teacher']:
+            teacher.eval()
         with torch.no_grad():
             epoch_val_losses = torch.zeros(len(val_loader), device=device)
             for i, data in enumerate(val_loader):
@@ -156,7 +156,7 @@ def train(
                     if actions is not None:
                         actions = actions.to(device)
 
-                loss = model.train_step(
+                loss = model.loss(
                     img1=images1, 
                     img2=images2, 
                     actions=actions, 
@@ -190,9 +190,15 @@ def train(
                 writer.add_scalar('val/1step_accuracy', ss_val_acc, epoch)
                 writer.add_scalar('val/1step_loss', ss_val_loss, epoch)
 
-            if ss_val_loss < best_val_loss and cfg['save'] and epoch % cfg['save_every'] == 0:
-                best_val_loss = ss_val_loss
+            # if last_val_loss < best_val_loss and cfg['save'] and epoch % cfg['save_every'] == 0:
+            #     best_val_loss = last_val_loss
+            if ss_val_acc > best_ss_val_acc and cfg['save']:
+                best_ss_val_acc = ss_val_acc
                 torch.save(model.state_dict(), cfg['save_dir'])
+
+            
+        if cfg['stop_learning_at'] is not None and epoch >= cfg['stop_learning_at']:
+            break
 
     if cfg['master_process']:
         if writer is not None:

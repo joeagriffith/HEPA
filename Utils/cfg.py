@@ -19,10 +19,13 @@ def mnist_cfg(
         'log_dir': 'out/MNIST/logs/',
         'save_dir': 'out/MNIST/models/',
         'batch_size': 256,
+        'num_epochs': 250,
+        'stop_learning_at': None,
         'in_features': 1,
         'resolution': 28,
         'num_actions': 5,
-        'patch_size': 4,
+        'patch_size': 7,
+        'min_keep': 1,
         'classifier_subset_sizes': [1, 10, 100, 1000],
     }
 
@@ -56,9 +59,13 @@ def modelnet10_cfg(
         'root': '../Datasets/',
         'log_dir': 'out/ModelNet10/logs/',
         'save_dir': 'out/ModelNet10/models/',
-        'batch_size': 128,
+        'batch_size': 64,
+        'num_epochs': 1500,
+        'stop_learning_at': 1000,
         'in_features': 1,
         'num_actions': 4,
+        'patch_size': 16,
+        'min_keep': 4,
         'classifier_subset_sizes': [1, 10, 50],
     }
 
@@ -71,7 +78,7 @@ def modelnet10_cfg(
     kwargs['resolution'] = resolution
     kwargs['dataset_dtype'] = dataset_dtype
     
-    return base_cfg(experiment, trial, model_type, *kwargs), specified_cfg
+    return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
 
 #=========================== base cfg initialiser ===========================
 
@@ -84,10 +91,13 @@ def base_cfg(
         log_dir:str,
         save_dir:str,
         batch_size:int,
+        num_epochs:int,
+        stop_learning_at:int,
         in_features: int,
         resolution: int,
         num_actions: int,
         patch_size: int,
+        min_keep: int,
         **kwargs,
     ):
     cfg = {
@@ -116,12 +126,13 @@ def base_cfg(
         'save_every': 1,
 
         'optimiser': 'AdamW',
-        'start_lr': 3e-5 if model_type == 'BYOL' else 3e-4,
+        'start_lr': 3e-5 if model_type in ['BYOL'] else 3e-4,
         'end_lr': 1e-6,
-        'start_wd': 0.004,
+        'start_wd': 0.04,
         'end_wd': 0.4,
         'batch_size': batch_size,
-        'num_epochs': 250,
+        'num_epochs': num_epochs,
+        'stop_learning_at': stop_learning_at,
         'exclude_bias': True,
         'exclude_bn': True,
         'decay_lr': True,
@@ -129,10 +140,17 @@ def base_cfg(
         'flat': 0,
 
         'has_teacher': False,
+        'bn_output': False,
 
         'track_feature_corrs': True,
         'track_feature_stds': True,
-        'classifier_subset_sizes': [1, 10, 100],
+        'classifier_subset_sizes': [1, 10, 100, 1000],
+
+        'ddp_rank': 0,
+        'ddp_world_size': 1,
+        'master_process': True,
+        'local': True,
+        'profile': False,
     }
 
     if cfg['optimiser'] == 'AdamW':
@@ -152,12 +170,24 @@ def base_cfg(
         cfg['start_tau'] = 0.996
         cfg['end_tau'] = 1.0
         cfg['consider_actions'] = True
+        cfg['p'] = 0.25
     
     elif cfg['model_type'] == 'BYOL':
         enforce_cfg['has_teacher'] = True
 
         cfg['start_tau'] = 0.996
         cfg['end_tau'] = 1.0
+        cfg['bn_output'] = True
+    
+    elif cfg['model_type'] == 'BYOPL':
+        enforce_cfg['has_teacher'] = True
+
+        cfg['start_tau'] = 0.996
+        cfg['end_tau'] = 1.0
+        cfg['bn_output'] = True
+        cfg['num_actions'] = num_actions
+        cfg['consider_actions'] = True
+        cfg['p'] = 0.25
 
     elif cfg['model_type'] == 'iJEPA':
         enforce_cfg['has_teacher'] = True
@@ -165,6 +195,7 @@ def base_cfg(
         cfg['start_tau'] = 0.996
         cfg['end_tau'] = 1.0
         cfg['patch_size'] = patch_size
+        cfg['min_keep'] = min_keep
    
     elif cfg['model_type'] in ['AE', 'MAE', 'Supervised']:
         enforce_cfg['has_teacher'] = False

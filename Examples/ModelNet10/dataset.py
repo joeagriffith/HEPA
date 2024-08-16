@@ -35,6 +35,10 @@ class ModelNet10(torch.utils.data.Dataset):
         self.transform = transform
         self.resolution = resolution
         self.dataset_dtype = dataset_dtype
+        self.use_tqdm = use_tqdm
+        self.rank = rank
+        self.world_size = world_size
+        self.seed = seed
 
         for c in self.classes:
             self.class_n[c] = len(os.listdir(self.root + 'ModelNet10/' + file_split + '/' + c))
@@ -192,11 +196,11 @@ class ModelNet10(torch.utils.data.Dataset):
         self.data = self.data[idx]
         self.labels = self.labels[idx]
         self.rotations = self.rotations[idx]
-
+        
 class ModelNet10Simple(ModelNet10):
     def __init__(
             self, 
-            cfg, 
+            root, 
             split, 
             n=None, 
             transform=None,
@@ -208,7 +212,7 @@ class ModelNet10Simple(ModelNet10):
             world_size=1,
             seed=42
         ):
-        super().__init__(cfg, split, n, transform, device, use_tqdm, resolution, dataset_dtype, rank, world_size, seed)
+        super().__init__(root, split, n, transform, device, use_tqdm, resolution, dataset_dtype, rank, world_size, seed)
 
     def __getitem__(self, idx):
         idx1 = np.random.randint(64)
