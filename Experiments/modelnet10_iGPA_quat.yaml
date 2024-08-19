@@ -1,35 +1,35 @@
 cfgs:
   - dataset: modelnet10
-    experiment: quat
-    trial: iGPA
+    experiment: action_ablation2
+    trial: iJEPA (cnn) stop400
     model_type: iGPA
     save: True
-    num_epochs: 500
+    stop_learning_at: 400
 
   - dataset: modelnet10
-    experiment: quat
-    trial: iGPA
+    experiment: action_ablation2
+    trial: iJEPA (cnn) stop400
     model_type: iGPA
     save: False
-    num_epochs: 500
+    stop_learning_at: 400
 
   - dataset: modelnet10
-    experiment: quat
-    trial: iGPA
+    experiment: action_ablation2
+    trial: iJEPA (cnn) stop400
     model_type: iGPA
     save: False
-    num_epochs: 500
+    stop_learning_at: 400
 
   - dataset: modelnet10
-    experiment: quat
-    trial: iGPA
+    experiment: action_ablation2
+    trial: iJEPA (cnn) stop400
     model_type: iGPA
     save: False
-    num_epochs: 500
+    stop_learning_at: 400
 
   - dataset: modelnet10
-    experiment: quat
-    trial: iGPA
+    experiment: action_ablation2
+    trial: iJEPA (cnn) stop400
     model_type: iGPA
     save: False
-    num_epochs: 500
+    stop_learning_at: 400

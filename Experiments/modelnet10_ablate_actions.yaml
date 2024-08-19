@@ -1,0 +1,53 @@
+cfgs:
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: iGPA
+    model_type: iGPA
+    save: False
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: iGPA_no_actions
+    model_type: iGPA
+    save: False
+    consider_actions: False
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: BYOPL
+    model_type: BYOPL
+    save: False
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: BYOPL_no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: iGPA
+    model_type: iGPA
+    save: False
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: iGPA_no_actions
+    model_type: iGPA
+    save: False
+    consider_actions: False
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: BYOPL
+    model_type: BYOPL
+    save: False
+
+  - dataset: modelnet10
+    experiment: action_ablation2
+    trial: BYOPL_no_actions
+    model_type: BYOPL
+    save: False
+    consider_actions: False

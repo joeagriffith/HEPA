@@ -1,7 +1,7 @@
 cfgs:
   - dataset: mnist
-    experiment: iJEPA_cnn
-    trial: iGPA
+    experiment: ActEncoder
+    trial: new
     model_type: iGPA
     save: False
     stop_at: 0

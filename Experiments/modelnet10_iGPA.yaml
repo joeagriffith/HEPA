@@ -1,24 +1,6 @@
 cfgs:
   - dataset: modelnet10
-    experiment: comparison
-    trial: iGPA
+    experiment: little_rot
+    trial: high8
     model_type: iGPA
-    save: False
-
-  - dataset: modelnet10
-    experiment: comparison
-    trial: iGPA
-    model_type: iGPA
-    save: False
-
-  - dataset: modelnet10
-    experiment: comparison
-    trial: iGPA
-    model_type: iGPA
-    save: False
-
-  - dataset: modelnet10
-    experiment: comparison
-    trial: iGPA
-    model_type: iGPA
-    save: False
+    save: True

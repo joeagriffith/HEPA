@@ -1,0 +1,6 @@
+cfgs:
+  - dataset: modelnet10
+    experiment: BYOPL
+    trial: no_project
+    model_type: BYOPL
+    save: True

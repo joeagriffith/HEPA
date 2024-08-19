@@ -1,52 +1,30 @@
 cfgs:
+  - dataset: mnist
+    experiment: comparison
+    trial: iJEPA (cnn) project_out
+    model_type: BYOPL
+    save: True
 
   - dataset: mnist
-    experiment: delme
-    trial: no_actions
+    experiment: comparison
+    trial: iJEPA (cnn) project_out
     model_type: BYOPL
     save: False
 
   - dataset: mnist
-    experiment: BYOPL
-    trial: no_actions
-    model_type: BYOPL
-    save: False
-    consider_actions: False
-
-  - dataset: mnist
-    experiment: BYOPL
-    trial: no_actions
-    model_type: BYOPL
-    save: False
-    consider_actions: False
-
-  - dataset: mnist
-    experiment: BYOPL
-    trial: no_actions
-    model_type: BYOPL
-    save: False
-    consider_actions: False
-
-  - dataset: mnist
-    experiment: BYOPL
-    trial: base
+    experiment: comparison
+    trial: iJEPA (cnn) project_out
     model_type: BYOPL
     save: False
 
   - dataset: mnist
-    experiment: BYOPL
-    trial: base
+    experiment: comparison
+    trial: iJEPA (cnn) project_out
     model_type: BYOPL
     save: False
 
   - dataset: mnist
-    experiment: BYOPL
-    trial: base
-    model_type: BYOPL
-    save: False
-
-  - dataset: mnist
-    experiment: BYOPL
-    trial: base
+    experiment: comparison
+    trial: iJEPA (cnn) project_out
     model_type: BYOPL
     save: False

@@ -110,6 +110,7 @@ class ModelNet10(torch.utils.data.Dataset):
                 self.data = torch.nn.functional.interpolate(self.data, size=(1, self.resolution, self.resolution))
 
             torch.save({'data': self.data, 'rotations': self.rotations, 'labels': self.labels}, path)
+
         
         # # remove data not accessed by process
         if world_size > 1:
@@ -129,6 +130,7 @@ class ModelNet10(torch.utils.data.Dataset):
         self.data = self.data.to(self.device)
         self.rotations = self.rotations.to(self.device)
         self.labels = self.labels.to(self.device)
+        self.sorted_rot_indices = torch.load(self.root + 'ModelNet10/sorted_rot_indices.pth')
 
     def split_set(self, ratio):
         assert 0 < ratio < 1, 'ratio must be between 0 and 1'
@@ -157,9 +159,28 @@ class ModelNet10(torch.utils.data.Dataset):
     def __getitem__(self, idx):
 
         idx1 = np.random.randint(64)
-        idx2 = (idx1 + 1) % 64
-        # idx2 = np.random.randint(64)
+        rot1 = self.rotations[idx][idx1]
 
+        # idx2 = np.random.randint(64)
+        # rot2 = self.rotations[idx][idx2]
+
+        idx2 = np.random.randint(low=0, high=8)
+        idx2 = self.sorted_rot_indices[idx1][idx2]
+        rot2 = self.rotations[idx][idx2]
+
+        # idx2 = None
+        # count = 0
+        # while idx2 is None:
+        #     candidate = np.random.randint(64)
+        #     rot2 = self.rotations[idx][candidate]
+        #     diff_norm = (rot2 - rot1).norm()
+        #     if diff_norm < 150:
+        #         idx2 = candidate
+        #     elif count > 100:
+        #         # warning
+        #         print('Warning: could not find second index after 100 attempts')
+        #         idx2 = np.random.randint(64)
+        
         img1 = self.data[idx][idx1]
         img2 = self.data[idx][idx2]
 
@@ -170,9 +191,6 @@ class ModelNet10(torch.utils.data.Dataset):
         if self.transform is not None:
             img1 = self.transform(img1)
             img2 = self.transform(img2)
-
-        rot1 = self.rotations[idx][idx1]
-        rot2 = self.rotations[idx][idx2]
     
         lab1 = self.labels[idx]
         lab2 = self.labels[idx]

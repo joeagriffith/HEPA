@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 from Examples.ModelNet10.dataset import ModelNet10, ModelNet10Simple
 from Examples.MNIST.dataset import MNIST
-from Utils.functional import feature_correlation, feature_std
+from Utils.functional import feature_correlation, feature_std, feature_entropy
 
 def linear_probing(
     model: nn.Module,
@@ -256,9 +256,10 @@ def get_rep_metrics(
         metrics['corr'] = feature_correlation(embeddings).item()
     if cfg['track_feature_stds']:
         metrics['std'] = feature_std(embeddings).item()
+    if cfg['track_feature_entropy']:
+        metrics['entropy'] = feature_entropy(embeddings).item()
 
     return metrics
-
 
 def eval_representations(
     model: nn.Module,

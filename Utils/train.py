@@ -181,6 +181,7 @@ def train(
                 rep_metrics = get_rep_metrics(model, val_dataset, cfg)
                 writer.add_scalar('val/feature_corr', rep_metrics['corr'], epoch)
                 writer.add_scalar('val/feature_std', rep_metrics['std'], epoch)
+                writer.add_scalar('val/feature_entropy', rep_metrics['entropy'], epoch)
 
             postfix = {'train_loss': last_train_loss, 'val_loss': last_val_loss}
             if writer is not None:
@@ -205,3 +206,4 @@ def train(
             rep_metrics = eval_representations(model, cfg)
             writer.add_scalar('test/feature_corr', rep_metrics['corr'], epoch)
             writer.add_scalar('test/feature_std', rep_metrics['std'], epoch)
+            writer.add_scalar('test/feature_entropy', rep_metrics['entropy'], epoch)

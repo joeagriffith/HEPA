@@ -74,15 +74,15 @@ def aug_transform(images, *_):
 
 def feature_correlation(x):
     # x: (N, C)
-    # Normalize
+
+    # Standardise features
     mean = x.mean(dim=0, keepdim=True)
     std = x.std(dim=0, keepdim=True)
     x = (x - mean) / (std + 1e-8)
-    # Compute correlation
+    # Compute normalised auto-correlation
     corr = torch.matmul(x.T, x) / (x.size(0)-1)
     # select above diagonal
     corr = torch.triu(corr, diagonal=1)
-    corr = corr[corr != 0]
     # average
     corr = corr.mean()
 
@@ -92,6 +92,13 @@ def feature_std(x):
     # x: (N, C)
     x = F.normalize(x, dim=1)
     return x.std(dim=0, keepdim=True).mean()
+
+def feature_entropy(x):
+    stds = x.std(dim=0)
+    normalised_stds = stds / (stds.sum() + 1e-8)
+    entropy = -torch.sum(normalised_stds * torch.log(normalised_stds + 1e-8))
+    max_entropy = torch.log(torch.tensor(x.size(1), dtype=torch.float32, device=x.device))
+    return entropy.mean() / max_entropy
 
 def repeat_interleave_batch(x, B, repeat):
     N = len(x) // B
