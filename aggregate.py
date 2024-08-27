@@ -26,8 +26,9 @@ for dataset in datasets:
                 reduce_ops = ("mean", "min", "max", "std")
 
                 events_dict = tbr.load_tb_events(input_event_dirs, verbose=verbose)
-                reduced_events = tbr.reduce_events(events_dict, reduce_ops, verbose=verbose)
+                reduced_events = tbr.reduce_events(events_dict, ("mean",), verbose=verbose)
                 tbr.write_tb_events(reduced_events, tb_events_out_dir, overwrite=False, verbose=verbose)
+                reduced_events = tbr.reduce_events(events_dict, reduce_ops, verbose=verbose)
                 tbr.write_data_file(reduced_events, csv_out_dir, overwrite=False, verbose=verbose)
 
                 print("Reduction complete")

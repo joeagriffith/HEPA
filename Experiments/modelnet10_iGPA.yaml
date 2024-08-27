@@ -1,6 +1,8 @@
 cfgs:
   - dataset: modelnet10
-    experiment: little_rot
-    trial: high8
+    experiment: action_ablation3
+    trial: iGPA - no_actions
     model_type: iGPA
     save: True
+    consider_actions: False
+

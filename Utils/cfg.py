@@ -22,6 +22,8 @@ def mnist_cfg(
         'in_features': 1,
         'resolution': 28,
         'num_actions': 5,
+        # 'num_actions': 4,
+        # 'num_actions': 2,
         'patch_size': 7,
         'min_keep': 1,
         'classifier_subset_sizes': [1, 10, 100, 1000],
@@ -117,7 +119,8 @@ def base_cfg(
 
         'log': True,
         'save': True,
-        'save_every': 1,
+        'save_every': 10,
+        'save_copy_every': None,
 
         'optimiser': 'AdamW',
         'start_lr': 3e-5 if model_type in ['BYOL'] else 3e-4,
@@ -166,6 +169,7 @@ def base_cfg(
         cfg['end_tau'] = 1.0
         cfg['consider_actions'] = True
         cfg['p'] = 0.25
+        cfg['save_metric'] = 'val_loss'
     
     elif cfg['model_type'] == 'BYOL':
         enforce_cfg['has_teacher'] = True
@@ -173,6 +177,7 @@ def base_cfg(
         cfg['start_tau'] = 0.996
         cfg['end_tau'] = 1.0
         cfg['bn_output'] = True
+        cfg['save_metric'] = 'none'
     
     elif cfg['model_type'] == 'BYOPL':
         enforce_cfg['has_teacher'] = True
@@ -183,6 +188,7 @@ def base_cfg(
         cfg['num_actions'] = num_actions
         cfg['consider_actions'] = True
         cfg['p'] = 0.25
+        cfg['save_metric'] = 'none'
 
     elif cfg['model_type'] == 'iJEPA':
         enforce_cfg['has_teacher'] = True
@@ -191,12 +197,14 @@ def base_cfg(
         cfg['end_tau'] = 1.0
         cfg['patch_size'] = patch_size
         cfg['min_keep'] = min_keep
+        cfg['save_metric'] = 'none'
    
     elif cfg['model_type'] in ['AE', 'MAE', 'Supervised']:
         enforce_cfg['has_teacher'] = False
 
         # class specific optionals
         cfg['data_aug'] = True
+        cfg['save_metric'] = 'val_loss'
 
     elif cfg['model_type'] == 'VAE':
         enforce_cfg['has_teacher'] = False
@@ -204,6 +212,7 @@ def base_cfg(
         # VAE specific optionals
         cfg['z_dim'] = 256 
         cfg['data_aug'] = True
+        cfg['save_metric'] = 'val_loss'
 
 
     for key, value in enforce_cfg.items():

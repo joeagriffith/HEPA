@@ -59,7 +59,7 @@ def train(
     # Initialise training variables
     last_train_loss = -1
     last_val_loss = -1
-    # best_val_loss = float('inf')
+    best_val_loss = float('inf')
     best_ss_val_acc = -1
     postfix = {}
 
@@ -191,14 +191,18 @@ def train(
                 writer.add_scalar('val/1step_accuracy', ss_val_acc, epoch)
                 writer.add_scalar('val/1step_loss', ss_val_loss, epoch)
 
-            # if last_val_loss < best_val_loss and cfg['save'] and epoch % cfg['save_every'] == 0:
-            #     best_val_loss = last_val_loss
-            if ss_val_acc > best_ss_val_acc and cfg['save']:
-                best_ss_val_acc = ss_val_acc
-                torch.save(model.state_dict(), cfg['save_dir'])
+            if epoch % cfg['save_every'] == 0 and cfg['save']:
+                if cfg['save_metric'] == 'val_loss' and last_val_loss < best_val_loss:
+                    best_val_loss = last_val_loss
+                    torch.save(model.state_dict(), cfg['save_dir'])
+                elif cfg['save_metric'] == 'none':
+                    torch.save(model.state_dict(), cfg['save_dir'])
 
+            if cfg['save_copy_every'] is not None and epoch % cfg['save_copy_every'] == 0:
+                path = cfg['save_dir'].replace('.pth', f'_epoch_{epoch}.pth')
+                torch.save(model.state_dict(), path)
             
-        if cfg['stop_learning_at'] is not None and epoch >= cfg['stop_learning_at']:
+        if cfg['stop_learning_at'] is not None and (epoch+1) >= cfg['stop_learning_at']:
             break
 
     if cfg['master_process']:

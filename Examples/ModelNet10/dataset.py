@@ -72,7 +72,7 @@ class ModelNet10(torch.utils.data.Dataset):
             self.labels = torch.empty(self.length, dtype=torch.long)
 
             # load info csv and convert RotX, RotY, RotZ columns to a (n,3) pytorch tensor
-            info = pd.read_csv(self.root + 'ModelNet10/' + 'train_info.csv')[['RotX', 'RotY', 'RotZ']].values.astype(np.float32)
+            info = pd.read_csv(self.root + 'ModelNet10/' + file_split + '_info.csv')[['RotX', 'RotY', 'RotZ']].values.astype(np.float32)
             info = torch.Tensor(info)
 
             guid = 0 if split in ['train', 'test'] else (sum(self.class_n.values()) * 64) - 1 # start from end if val split

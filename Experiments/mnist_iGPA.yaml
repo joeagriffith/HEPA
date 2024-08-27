@@ -1,7 +1,8 @@
 cfgs:
   - dataset: mnist
-    experiment: ActEncoder
-    trial: new
+    experiment: viz
+    trial: iGPA
     model_type: iGPA
-    save: False
+    save: True
     stop_at: 0
+    save_copy_every: 50
