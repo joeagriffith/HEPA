@@ -2,7 +2,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 import os
 
-from Models import iGPA, BYOL, BYOPL, iJEPA, AE, VAE, MAE, Supervised
+from Methods import GPA, BYOL, JEPA, iJEPA, AE, VAE, MAE, Supervised
 
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -11,8 +11,8 @@ from Examples.MNIST.dataset import MNIST
 from Utils.dataset import PreloadedDataset
 
 def get_model(cfg:dict):
-    if cfg['model_type'] == 'iGPA':
-        return iGPA(
+    if cfg['model_type'] == 'GPA':
+        return GPA(
             in_features=cfg['in_features'],
             num_actions=cfg['num_actions'],
             stop_at=cfg['stop_at'],
@@ -27,8 +27,8 @@ def get_model(cfg:dict):
             resolution=cfg['resolution'],
         ).to(cfg['device'])
     
-    elif cfg['model_type'] == 'BYOPL':
-        return BYOPL(
+    elif cfg['model_type'] == 'JEPA':
+        return JEPA(
             in_features=cfg['in_features'],
             num_actions=cfg['num_actions'],
             resolution=cfg['resolution'],

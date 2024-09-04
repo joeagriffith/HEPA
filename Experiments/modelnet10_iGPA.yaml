@@ -1,8 +1,0 @@
-cfgs:
-  - dataset: modelnet10
-    experiment: action_ablation3
-    trial: iGPA - no_actions
-    model_type: iGPA
-    save: True
-    consider_actions: False
-

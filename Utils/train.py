@@ -95,9 +95,14 @@ def train(
                 images1, _ = data
             elif cfg['dataset'] == 'modelnet10':
                 (images1, rot1, _), (images2, rot2, _) = data
-                # actions = (rot2 - rot1) / 360.0
-                actions = quaternion_delta(rot1, rot2)
-                # actions = axis_angle(rot1, rot2)
+                if cfg['action_type'] == 'euler_delta':
+                    actions = (rot2 - rot1) / 360.0
+                elif cfg['action_type'] == 'quaternion_delta':
+                    actions = quaternion_delta(rot1, rot2)
+                elif cfg['action_type'] == 'axis_angle':
+                    actions = axis_angle(rot1, rot2)
+                else:
+                    raise NotImplementedError(f'Action type {cfg["action_type"]} not implemented')
             else:
                 raise NotImplementedError(f'Dataset {cfg["dataset"]} not implemented')
 
@@ -145,9 +150,14 @@ def train(
                     images1, _ = data
                 elif cfg['dataset'] == 'modelnet10':
                     (images1, rot1, _), (images2, rot2, _) = data
-                    actions = (rot2 - rot1) / 360.0
-                    # actions = quaternion_delta(rot1, rot2)
-                    # actions = axis_angle(rot1, rot2)
+                    if cfg['action_type'] == 'euler_delta':
+                        actions = (rot2 - rot1) / 360.0
+                    elif cfg['action_type'] == 'quaternion_delta':
+                        actions = quaternion_delta(rot1, rot2)
+                    elif cfg['action_type'] == 'axis_angle':
+                        actions = axis_angle(rot1, rot2)
+                    else:
+                        raise NotImplementedError(f'Action type {cfg["action_type"]} not implemented')
 
                 if images1.device != device:
                     images1 = images1.to(device)

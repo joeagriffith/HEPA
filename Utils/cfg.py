@@ -43,6 +43,7 @@ def modelnet10_cfg(
         model_type:str, 
         resolution:int=128, 
         dataset_dtype:str='uint8',
+        action_type:str='quaternion_delta',
         **kwargs
     ):
 
@@ -53,6 +54,7 @@ def modelnet10_cfg(
     specified_cfg['model_type'] = model_type
     specified_cfg['resolution'] = resolution
     specified_cfg['dataset_dtype'] = dataset_dtype
+    specified_cfg['action_type'] = action_type
 
     enforce_cfg = {
         'dataset': 'modelnet10',
@@ -61,11 +63,18 @@ def modelnet10_cfg(
         'save_dir': 'out/ModelNet10/models/',
         'batch_size': 64,
         'in_features': 1,
-        'num_actions': 4,
         'patch_size': 16,
         'min_keep': 4,
         'classifier_subset_sizes': [1, 10, 50],
     }
+    if action_type == 'euler_delta':
+        enforce_cfg['num_actions'] = 3
+    elif action_type == 'quaternion_delta':
+        enforce_cfg['num_actions'] = 4
+    elif action_type == 'axis_angle':
+        enforce_cfg['num_actions'] = 4
+    else:
+        raise NotImplementedError(f'Action type {action_type} not implemented')
 
     for key, value in enforce_cfg.items():
         if key in kwargs:
@@ -75,6 +84,7 @@ def modelnet10_cfg(
 
     kwargs['resolution'] = resolution
     kwargs['dataset_dtype'] = dataset_dtype
+    kwargs['action_type'] = action_type
     
     return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
 
@@ -107,6 +117,7 @@ def base_cfg(
 
         'dataset': dataset,
         'dataset_dtype': 'float32',
+        'action_type': 'euler_delta',
         'root': root,
         'log_dir': log_dir,
         'save_dir': save_dir,
@@ -159,10 +170,10 @@ def base_cfg(
         raise ValueError(f"Optimiser '{cfg['optimiser']}' is not supported.")
 
     enforce_cfg = {}
-    if cfg['model_type'] == 'iGPA':
+    if cfg['model_type'] == 'GPA':
         enforce_cfg['has_teacher'] = True
 
-        # iGPA specific optionals
+        # GPA specific optionals
         cfg['num_actions'] = num_actions
         cfg['stop_at'] = 0
         cfg['start_tau'] = 0.996
@@ -179,7 +190,7 @@ def base_cfg(
         cfg['bn_output'] = True
         cfg['save_metric'] = 'none'
     
-    elif cfg['model_type'] == 'BYOPL':
+    elif cfg['model_type'] == 'JEPA':
         enforce_cfg['has_teacher'] = True
 
         cfg['start_tau'] = 0.996
@@ -228,7 +239,7 @@ def base_cfg(
 
 
     # Conditionals
-    if cfg['model_type'] == 'iGPA':
+    if cfg['model_type'] == 'GPA':
         if cfg['stop_at'] == 0:
             cfg['has_teacher'] = False
 

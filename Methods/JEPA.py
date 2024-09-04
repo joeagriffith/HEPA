@@ -5,7 +5,7 @@ import torchvision.transforms.v2.functional as F_v2
 from Utils.nn.resnet_encoder import resnet18
 from Utils.nn.nets import Encoder28
 
-class BYOPL(nn.Module):
+class JEPA(nn.Module):
     def __init__(self, in_features, num_actions, resolution=28, p=0.25, consider_actions=True):
         super().__init__()
         self.in_features = in_features
@@ -13,6 +13,8 @@ class BYOPL(nn.Module):
         self.resolution = resolution
         self.p = p
         self.consider_actions = consider_actions
+
+        print(f'num_actions: {num_actions}')
 
         if resolution == 28:
             self.num_features = 256
@@ -49,7 +51,7 @@ class BYOPL(nn.Module):
         return self.encoder(x)
     
     def copy(self):
-        model = BYOPL(self.in_features, self.num_actions, resolution=self.resolution, p=self.p, consider_actions=self.consider_actions).to(next(self.parameters()).device)
+        model = JEPA(self.in_features, self.num_actions, resolution=self.resolution, p=self.p, consider_actions=self.consider_actions).to(next(self.parameters()).device)
         model.load_state_dict(self.state_dict())
         return model
 

@@ -1,0 +1,36 @@
+cfgs:
+    
+  - dataset: modelnet10
+    experiment: trans_layers
+    trial: GPA_4layers
+    model_type: iGPA
+    save: False
+    stop_learning_at: 1500
+
+  - dataset: modelnet10
+    experiment: trans_layers
+    trial: JEPA_4layers
+    model_type: BYOPL
+    save: False
+    stop_learning_at: 1500
+    
+  - dataset: modelnet10
+    experiment: trans_layers
+    trial: GPA_4layers
+    model_type: iGPA
+    save: False
+    stop_learning_at: 1500
+
+  - dataset: modelnet10
+    experiment: trans_layers
+    trial: JEPA_4layers
+    model_type: BYOPL
+    save: False
+    stop_learning_at: 1500
+    
+  - dataset: modelnet10
+    experiment: trans_layers
+    trial: GPA_4layers
+    model_type: iGPA
+    save: False
+    stop_learning_at: 1500

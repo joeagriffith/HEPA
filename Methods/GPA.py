@@ -7,7 +7,7 @@ import torchvision.transforms.v2.functional as F_v2
 from Utils.nn.resnet_encoder import resnet18, resnet34
 from Utils.nn.conv_mixer import ConvMixer
 
-class iGPA(nn.Module):
+class GPA(nn.Module):
     def __init__(self, in_features, num_actions, stop_at=0, resolution=28, p=0.25, consider_actions=True):
         super().__init__()
         self.in_features = in_features
@@ -113,7 +113,7 @@ class iGPA(nn.Module):
         return pred
     
     def copy(self):
-        model = iGPA(self.in_features, self.num_actions, self.stop_at, self.resolution).to(next(self.parameters()).device)
+        model = GPA(self.in_features, self.num_actions, self.stop_at, self.resolution).to(next(self.parameters()).device)
         model.load_state_dict(self.state_dict())
         return model
     
