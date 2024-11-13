@@ -2,12 +2,10 @@ import torch
 import torch.nn as nn
 from torchvision.models.vision_transformer import MLPBlock, EncoderBlock
 from torchvision.ops import MLP
-from flash_attn import flash_attn_qkvpacked_func
 
 from typing import Callable
 from functools import partial
 from collections import OrderedDict
-from flash_attn.modules.mha import MHA
 
 from Utils.pos_embed import get_2d_sincos_pos_embed, interpolate_pos_embedding
 
@@ -28,8 +26,7 @@ class EncoderBlock(nn.Module):
 
         # Attention block
         self.ln_1 = norm_layer(hidden_dim)
-        # self.self_attention = MultiheadAttention(hidden_dim, num_heads, dropout=attention_dropout, batch_first=True)
-        self.self_attention = MHA(hidden_dim, num_heads, dropout=attention_dropout, use_flash_attn=True)
+        self.self_attention = nn.MultiheadAttention(hidden_dim, num_heads, dropout=attention_dropout, batch_first=True)
         self.dropout = nn.Dropout(dropout)
 
         # MLP block

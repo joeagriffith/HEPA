@@ -7,7 +7,6 @@ import math
 from functools import partial
 from typing import Callable
 from collections import OrderedDict
-from flash_attn.modules.mha import MHA
 
 from Utils.pos_embed import get_2d_sincos_pos_embed
 
@@ -167,7 +166,7 @@ class TransformerEncoderBottleneck(nn.Module):
         norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
     ):
         assert embed_dim % num_heads == 0, f"embed_dim {embed_dim} must be divisible by num_heads {num_heads}"
-        assert in_shape[0] == in_shape[1], "in_shape must be square"
+        # assert in_shape[0] == in_shape[1], "in_shape must be square"
 
         super().__init__()
 
@@ -181,7 +180,7 @@ class TransformerEncoderBottleneck(nn.Module):
 
         num_tokens = in_shape[0] * in_shape[1]
         self.pos_embed = nn.Parameter(torch.zeros(1, num_tokens, embed_dim), requires_grad=False)
-        pos_embedding = get_2d_sincos_pos_embed(embed_dim, in_shape[0], cls_token=False)
+        pos_embedding = get_2d_sincos_pos_embed(embed_dim, in_shape[0], in_shape[1], cls_token=False)
         self.pos_embed.data.copy_(torch.from_numpy(pos_embedding).float().unsqueeze(0))
         self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02)
         self.registers = nn.Parameter(torch.randn(1, num_registers, embed_dim) * 0.02)

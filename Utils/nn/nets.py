@@ -331,3 +331,24 @@ class Decoder224(nn.Module):
     def forward(self, z):
         z = z.view(-1, self.num_features, 1, 1)
         return self.decoder(z)
+
+class GRU(nn.Module):
+    def __init__(self, num_features, num_layers):
+        super().__init__()
+        self.gru = nn.GRU(num_features, num_features, num_layers, batch_first=True)
+
+    def forward(self, x):
+        x = x.squeeze(2).permute(0, 2, 1)
+        return self.gru(x)[0][:, -1]
+
+class AudioEncoder(nn.Module):
+    def __init__(self, num_features):
+        super().__init__()
+        
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, num_features, (128, 8), 8),
+            GRU(num_features, 4),
+        )
+
+    def forward(self, x):
+        return self.encoder(x)

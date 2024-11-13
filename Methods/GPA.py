@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from Utils.nn.nets import Encoder28, Decoder1, Decoder5, Decoder28, Decoder128, Decoder224
+from Utils.nn.nets import Encoder28, Decoder1, Decoder5, Decoder28, Decoder128, Decoder224, AudioEncoder
 import torchvision.transforms.v2.functional as F_v2
 from Utils.nn.resnet_encoder import resnet18, resnet34
 from Utils.nn.conv_mixer import ConvMixer
@@ -39,8 +39,11 @@ class GPA(nn.Module):
             elif resolution == 224:
                 self.decoder = Decoder224(self.num_features)
         
+        elif resolution == 1: # VoxCeleb1
+            self.encoder = AudioEncoder(self.num_features)
+        
         else:
-            raise NotImplementedError(f'resolution={resolution} not implemented for iGPA')
+            raise NotImplementedError(f'resolution={resolution} not implemented for GPA')
 
         self.action_encoder = nn.Sequential(
             nn.Linear(num_actions, 128),

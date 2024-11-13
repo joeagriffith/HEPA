@@ -15,7 +15,7 @@ def mnist_cfg(
 
     enforce_cfg = {
         'dataset': 'mnist',
-        'root': '../Datasets/',
+        'root': '../../datasets/',
         'log_dir': 'out/MNIST/logs/',
         'save_dir': 'out/MNIST/models/',
         'batch_size': 256,
@@ -58,7 +58,7 @@ def modelnet10_cfg(
 
     enforce_cfg = {
         'dataset': 'modelnet10',
-        'root': '../Datasets/',
+        'root': '../../datasets/',
         'log_dir': 'out/ModelNet10/logs/',
         'save_dir': 'out/ModelNet10/models/',
         'batch_size': 64,
@@ -87,6 +87,44 @@ def modelnet10_cfg(
     kwargs['action_type'] = action_type
     
     return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
+
+def voxceleb1_cfg(
+        experiment:str, 
+        trial:str, 
+        model_type:str, 
+        **kwargs
+    ):
+
+    # The subset of non-default values
+    specified_cfg = kwargs.copy()
+    specified_cfg['experiment'] = experiment
+    specified_cfg['trial'] = trial
+    specified_cfg['model_type'] = model_type
+
+    enforce_cfg = {
+        'dataset': 'voxceleb1',
+        'root': '../../datasets/',
+        'log_dir': 'out/VoxCeleb1/logs/',
+        'save_dir': 'out/VoxCeleb1/models/',
+        'batch_size': 256,
+        'in_features': 1,
+        'resolution': 1,
+        'num_actions': 5,
+        # 'num_actions': 4,
+        # 'num_actions': 2,
+        'patch_size': 7,
+        'min_keep': 1,
+        'classifier_subset_sizes': [1, 10, 100, 1000],
+    }
+
+    for key, value in enforce_cfg.items():
+        if key in kwargs:
+            assert kwargs[key] == value, f"Specified {key} does not agree with enforced configuration. Must be {value}."
+        else:
+            kwargs[key] = value
+    
+    return base_cfg(experiment, trial, model_type, **kwargs), specified_cfg
+
 
 #=========================== base cfg initialiser ===========================
 
@@ -225,7 +263,6 @@ def base_cfg(
         cfg['data_aug'] = True
         cfg['save_metric'] = 'val_loss'
 
-
     for key, value in enforce_cfg.items():
         if key in kwargs:
             assert kwargs[key] == value, f"Specified {key} does not agree with enforced configuration. Must be {value}."
@@ -236,7 +273,6 @@ def base_cfg(
         if key not in cfg:
             raise ValueError(f"'{key}' is not a valid configuration parameter.")
         cfg[key] = value
-
 
     # Conditionals
     if cfg['model_type'] == 'GPA':

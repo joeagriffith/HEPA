@@ -8,6 +8,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from Examples.ModelNet10.dataset import ModelNet10, ModelNet10Simple
 from Examples.MNIST.dataset import MNIST
+from Examples.VoxCeleb1.dataset import VoxCeleb1, VoxCeleb1TripletDataset
 from Utils.dataset import PreloadedDataset
 
 def get_model(cfg:dict):
@@ -113,18 +114,23 @@ def get_datasets(cfg):
     elif cfg['dataset'] == 'modelnet10':
         train_set = ModelNet10(cfg['root'], 'train', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
         train_set, val_set = train_set.split_set(cfg['train_ratio'])
+    
+    elif cfg['dataset'] == 'voxceleb1':
+        train_set = VoxCeleb1(cfg['root'], 'train', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        train_set, val_set = train_set.split_set(cfg['train_ratio'])
 
     return train_set, val_set
     
-
 def get_ss_datasets(cfg):
-    device = torch.device(cfg['device'])
     if cfg['dataset'] == 'mnist':
         ss_train_dataset = MNIST(cfg['root'], split='train', n=1, transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
         ss_val_dataset = MNIST(cfg['root'], split='val', transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
     elif cfg['dataset'] == 'modelnet10':
         ss_train_dataset = ModelNet10Simple(cfg['root'], 'train', n=10, transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
         ss_val_dataset = ModelNet10Simple(cfg['root'], 'val', n=10, transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+    elif cfg['dataset'] == 'voxceleb1':
+        ss_train_dataset = VoxCeleb1TripletDataset(cfg['root'], 'train', transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        ss_val_dataset = VoxCeleb1TripletDataset(cfg['root'], 'val', transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
     else:
         raise ValueError(f'Dataset {cfg["dataset"]} not implemented')
     

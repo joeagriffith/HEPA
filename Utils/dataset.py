@@ -93,10 +93,9 @@ class PreloadedDataset(Dataset):
             preloaded_dataset.transformed_images = torch.stack(data).to(device)
         
         return preloaded_dataset
-              
             
     #  Transforms the data in batches so as not to overload memory
-    def apply_transform(self, device=None, batch_size=500):
+    def apply_transform(self, device=torch.device('cuda'), batch_size=500):
         if self.transform is not None:
             if device is None:
                 device = self.device
