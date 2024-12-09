@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from Utils.nn.nets import Encoder28, Decoder1, Decoder5, Decoder28, Decoder128, Decoder224, AudioEncoder
+from Utils.nn.nets import Encoder28, Decoder1, Decoder5, Decoder28, Decoder128, Decoder224, VoxEncoder, VoxDecoder
 import torchvision.transforms.v2.functional as F_v2
 from Utils.nn.resnet_encoder import resnet18, resnet34
 from Utils.nn.conv_mixer import ConvMixer
@@ -40,7 +40,9 @@ class GPA(nn.Module):
                 self.decoder = Decoder224(self.num_features)
         
         elif resolution == 1: # VoxCeleb1
-            self.encoder = AudioEncoder(self.num_features)
+            self.num_features = 256
+            self.encoder = VoxEncoder(self.num_features, num_layers=4)
+            self.decoder = VoxDecoder(1, self.num_features)
         
         else:
             raise NotImplementedError(f'resolution={resolution} not implemented for GPA')
@@ -61,48 +63,113 @@ class GPA(nn.Module):
             nn.Linear(512, self.num_features)
         )
 
-    def interact(self, images, groups=8):
-        # Sample Action
-        if images.shape[0] < 8:
-            groups = images.shape[0]
-        # assert images.shape[0] % groups == 0, f'images.shape[0]={images.shape[0]} must be divisible by groups={groups}'
-        n_per = images.shape[0] // groups
-        images_aug = torch.zeros_like(images)
-        actions = torch.empty((images.shape[0], 5), device=images.device)
-        for i in range(groups):
-            act_p = torch.rand(5) # whether to apply each augmentation
-            angle = torch.rand(1).item() * 360 - 180 if act_p[0] < self.p else 0
-            translate_x = torch.randint(-8, 9, (1,)).item() if act_p[1] < self.p else 0
-            translate_y = torch.randint(-8, 9, (1,)).item() if act_p[2] < self.p else 0
-            scale = torch.rand(1).item() * 0.5 + 0.75 if act_p[3] < self.p else 1.0
-            shear = torch.rand(1).item() * 50 - 25 if act_p[4] < self.p else 0
-            lo, hi = i*n_per, min(images.shape[0], (i+1)*n_per)
-            images_aug[lo:hi] = F_v2.affine(images[lo:hi], angle=angle, translate=(translate_x, translate_y), scale=scale, shear=shear)
-            actions[lo:hi] = torch.tensor([angle/180, translate_x/8, translate_y/8, (scale-1.0)/0.25, shear/25], dtype=torch.float32, device=images.device).unsqueeze(0).repeat(hi-lo, 1)
+    # For acting on MNIST images
+    def transform_images(self, images):
+        act_p = torch.rand(5) # whether to apply each augmentation
+        angle = torch.rand(1).item() * 360 - 180 if act_p[0] < self.p else 0
+        translate_x = torch.randint(-8, 9, (1,)).item() if act_p[1] < self.p else 0
+        translate_y = torch.randint(-8, 9, (1,)).item() if act_p[2] < self.p else 0
+        scale = torch.rand(1).item() * 0.5 + 0.75 if act_p[3] < self.p else 1.0
+        shear = torch.rand(1).item() * 50 - 25 if act_p[4] < self.p else 0
+        images_aug = F_v2.affine(images, angle=angle, translate=(translate_x, translate_y), scale=scale, shear=shear)
+        actions = torch.tensor([angle/180, translate_x/8, translate_y/8, (scale-1.0)/0.25, shear/25], dtype=torch.float32, device=images.device).unsqueeze(0).repeat(images.shape[0], 1)
 
         return images_aug, actions
 
-    # def interact(self, images, groups=8):
-    #     N, C, H, W = images.shape
-    #     crop_size = 14
-    #     num_per_group = N // groups
-    #     img1 = torch.zeros((N, C, crop_size, crop_size), device=images.device)
-    #     img2 = torch.zeros((N, C, crop_size, crop_size), device=images.device)
-    #     actions = torch.zeros((N, 2), device=images.device)
-    #     for g in range(groups):
-    #         start_x = torch.randint(0, W-crop_size, (2,))
-    #         start_y = torch.randint(0, H-crop_size, (2,))
-    #         img1[g*num_per_group:(g+1)*num_per_group] = images[g*num_per_group:(g+1)*num_per_group, :, start_y[0]:start_y[0]+crop_size, start_x[0]:start_x[0]+crop_size]
-    #         img2[g*num_per_group:(g+1)*num_per_group] = images[g*num_per_group:(g+1)*num_per_group, :, start_y[1]:start_y[1]+crop_size, start_x[1]:start_x[1]+crop_size]
-    #         # actions[g*num_per_group:(g+1)*num_per_group] = torch.tensor([start_x[0]/14, start_y[0]/14, start_x[1]/14, start_y[1]/14], device=images.device).unsqueeze(0).repeat(num_per_group, 1)
-    #         actions[g*num_per_group:(g+1)*num_per_group] = torch.tensor([(start_x[1] - start_x[0])/14, (start_y[1] - start_y[0])/14], device=images.device).unsqueeze(0).repeat(num_per_group, 1)
-    #     img1 = F_v2.resize(img1, (28, 28))
-    #     img2 = F_v2.resize(img2, (28, 28))
+    # For acting on VoxCeleb1 spectrograms
+    def transform_spectrogram(self, images):
+        _, _, original_height, original_width = images.size()
 
-    #     return img1, img2, actions
+        width_factor = torch.randn(1).item() * 0.1 + 1.0
+        while width_factor < 0.75 or width_factor > 1.25:
+            width_factor = torch.randn(1).item() * 0.1 + 1.0
+        height_factor = torch.randn(1).item() * 0.1 + 1.0
+        while height_factor < 0.75 or height_factor > 1.25:
+            height_factor = torch.randn(1).item() * 0.1 + 1.0
+        shift = torch.randn((2,)) * 8
+        while shift.abs().max() > 20:
+            shift = torch.randn((2,)) * 8
+        shift_x = int(shift[0].item())
+        shift_y = int(shift[1].item())
+
+        # Calculate new dimensions
+        new_width = int(original_width * width_factor)
+        new_height = int(original_height * height_factor)
+        
+        # Resize the image
+        images_aug = F.interpolate(images, size=(new_height, new_width), mode='bilinear', align_corners=False)
+        
+        # Calculate padding if needed
+        pad_width = max(0, original_width - new_width)
+        pad_height = max(0, original_height - new_height)
+        
+        # Pad the image to the original size
+        if pad_width > 0 or pad_height > 0:
+            images_aug = F.pad(images_aug, 
+                                (pad_width // 2, pad_width - pad_width // 2, 
+                                pad_height // 2, pad_height - pad_height // 2))
+        
+        # Shift the image
+        if shift_x != 0 or shift_y != 0:
+            images_aug = F.pad(images_aug, 
+                                (shift_x, -shift_x, 
+                                shift_y, -shift_y))
+        
+        # Center crop to original size if necessary
+        if width_factor > 1.0 or height_factor > 1.0:
+            start_x = (images_aug.size(3) - original_width) // 2
+            start_y = (images_aug.size(2) - original_height) // 2
+            images_aug = images_aug[:, :, start_y:start_y + original_height, start_x:start_x + original_width]
+        
+        actions = torch.tensor([(width_factor-1.0)/0.25, (height_factor-1.0)/0.25, shift_x/8, shift_y/8], dtype=torch.bfloat16, device=images.device).unsqueeze(0).repeat(images.shape[0], 1)
+        return images_aug, actions
+    
+    # Fake interact that does nothing
+    def interact(self, images, groups=8):
+        return images, torch.zeros(images.shape[0], 4, device=images.device)
+
+    # def interact(self, images, groups=8):
+    #     """
+    #     Interact with the images by applying either image or spectrogram transformations.
+        
+    #     Parameters:
+    #     images (torch.Tensor): The input image tensor.
+    #     groups (int): The number of groups to split the images into.
+        
+    #     Returns:
+    #     torch.Tensor: The augmented images tensor.
+    #     torch.Tensor: The actions tensor.
+
+    #     """
+    #     N, _, original_height, original_width = images.size()
+    #     if N < groups:
+    #         groups = N
+    #     n_per = N // groups
+
+    #     images_aug_arr = []
+    #     actions_arr = []
+
+    #     lo, hi = 0, n_per + N % groups
+    #     while lo < N:
+    #         if original_width <= 32:
+    #             images_aug, actions = self.transform_images(images[lo:hi])
+    #         else:
+    #             images_aug, actions = self.transform_spectrogram(images[lo:hi])
+            
+    #         images_aug_arr.append(images_aug)
+    #         actions_arr.append(actions)
+
+    #         lo = hi
+    #         hi = min(N, lo + n_per)
+        
+    #     return torch.cat(images_aug_arr, dim=0), torch.cat(actions_arr, dim=0)
 
     def forward(self, x, stop_at=-1):
-        return self.encoder(x, stop_at)
+        # return self.encoder(x, stop_at)
+        if stop_at != -1:
+            # return self.encoder(x, stop_at)
+            raise(f'Changed this, make sure works?')
+        return self.encoder(x)
     
     def predict(self, x, a=None):
         if a is None:
@@ -123,7 +190,6 @@ class GPA(nn.Module):
     def loss(self, img1, img2, actions, teacher, **_):
         if img2 is None:
             img2, actions = self.interact(img1)
-            # img1, img2, actions = self.interact(img1)
         
         if not self.consider_actions:
             actions *= 0.0

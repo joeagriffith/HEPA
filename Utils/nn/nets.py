@@ -341,14 +341,54 @@ class GRU(nn.Module):
         x = x.squeeze(2).permute(0, 2, 1)
         return self.gru(x)[0][:, -1]
 
-class AudioEncoder(nn.Module):
-    def __init__(self, num_features):
+class VoxEncoder(nn.Module):
+    def __init__(self, num_features, num_layers=12):
         super().__init__()
         
         self.encoder = nn.Sequential(
             nn.Conv2d(1, num_features, (128, 8), 8),
-            GRU(num_features, 4),
+            GRU(num_features, num_layers),
         )
 
     def forward(self, x):
         return self.encoder(x)
+
+class VoxDecoder(nn.Module):
+    def __init__(self, out_channels, num_features):
+        super().__init__()
+        self.num_features = num_features
+        self.upsample = nn.Upsample(scale_factor=2)
+        self.decoder = nn.ModuleList([
+
+            # TransformerDecoderBottleneck(num_features, (8,8), 1, 4, 4, 1024, 0.0, 0.0),
+            nn.ConvTranspose2d(num_features, 512, (8,16), 1),
+            # nn.ConvTranspose2d(512, num_features, 8, 1),
+
+            # nn.ConvTranspose2d(512, 512, 2, 2),
+            ConvResidualBlock(512, 512),
+
+            # nn.ConvTranspose2d(512, 512, 2, 2),
+            ConvResidualBlock(512, 256),
+
+            # nn.ConvTranspose2d(256, 256, 2, 2),
+            ConvResidualBlock(256, 128),
+
+            # nn.ConvTranspose2d(128, 128, 2, 2),
+            ConvResidualBlock(128, 128),
+
+            nn.Sequential(
+                nn.BatchNorm2d(128),
+                nn.SiLU(),
+                nn.Conv2d(128, out_channels, 3, 1, 1),
+            ),
+        ])
+
+    def forward(self, z, stop_at=0):
+        z = z.view(-1, self.num_features, 1, 1)
+        i = len(self.decoder)
+        for layer in self.decoder:
+            if i < len(self.decoder) and i > 1:
+                z = self.upsample(z)
+            z = layer(z)
+            i -= 1
+        return z

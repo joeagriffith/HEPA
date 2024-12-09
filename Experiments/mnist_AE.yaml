@@ -1,6 +1,0 @@
-cfgs:
-  - dataset: mnist
-    experiment: comparison
-    trial: AE
-    model_type: AE
-    save: False

@@ -15,7 +15,7 @@ import torch.distributed as dist
 from Utils.train import train
 from Utils.evals import linear_probing
 from Utils.utils import get_optimiser, get_model, get_datasets, get_writer
-from Utils.cfg import mnist_cfg, modelnet10_cfg
+from Utils.cfg import mnist_cfg, modelnet10_cfg, voxceleb1_cfg
 
 if __name__ == '__main__':
     start_time = time.time()
@@ -36,6 +36,8 @@ if __name__ == '__main__':
             cfgs.append(modelnet10_cfg(**yaml_cfg))
         elif yaml_cfg['dataset'] == 'mnist':
             cfgs.append(mnist_cfg(**yaml_cfg))
+        elif yaml_cfg['dataset'] == 'voxceleb1':
+            cfgs.append(voxceleb1_cfg(**yaml_cfg))
         else:
             raise ValueError(f'Dataset {yaml_cfg["dataset"]} not supported')
 
@@ -74,7 +76,7 @@ if __name__ == '__main__':
 
         if master_process:
             cfg_start_time = time.time()
-            assert cfg['device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
+            assert cfg['compute_device'] == device.split(':')[0], f'Device mismatch: {cfg["device"]} != {device}'
 
         if cfg['seed'] == -1:
             cfg['seed'] = torch.randint(0, 1000000000, (1,)).item()
@@ -102,17 +104,16 @@ if __name__ == '__main__':
         cfg['ddp_world_size'] = ddp_world_size
         cfg['master_process'] = master_process
 
-        if cfg['device'] == 'cuda':
+        if cfg['compute_device'] == 'cuda':
             torch.backends.cudnn.benchmark = True
 
         # Init Model
         model = get_model(cfg)
-        if cfg['use_compile']:
-            model = torch.compile(model)
+        
         if ddp:
             model = DDP(model, device_ids=[ddp_local_rank])
         raw_model = model.module if ddp else model
-        cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['device']))
+        cfg['device_name'] = torch.cuda.get_device_name(torch.device(cfg['compute_device']))
         cfg['local'] = "PBS_JOBID" not in os.environ
 
         # Init Optimiser
@@ -168,7 +169,7 @@ if __name__ == '__main__':
                 # for n in [1, 10, 100, 1000]:
                 for n in cfg['classifier_subset_sizes']:
                     writer = get_writer(cfg, n)
-                    linear_probing(model, writer, n, cfg)
+                    linear_probing(model, writer, n, cfg, finetune=False, train_set=train_set, val_set=val_set)
             else:
                 print('No logging, skipping linear probing')
             eval_time = time.time()

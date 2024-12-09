@@ -104,17 +104,18 @@ def voxceleb1_cfg(
     enforce_cfg = {
         'dataset': 'voxceleb1',
         'root': '../../datasets/',
+        'data_device': 'cpu',
         'log_dir': 'out/VoxCeleb1/logs/',
         'save_dir': 'out/VoxCeleb1/models/',
-        'batch_size': 256,
+        'batch_size': 128,
+        'dataset_dtype': 'bfloat16',
         'in_features': 1,
         'resolution': 1,
-        'num_actions': 5,
-        # 'num_actions': 4,
-        # 'num_actions': 2,
-        'patch_size': 7,
+        'num_actions': 4,
+        'patch_size': 8,
         'min_keep': 1,
         'classifier_subset_sizes': [1, 10, 100, 1000],
+        'train_ratio': 0.9,
     }
 
     for key, value in enforce_cfg.items():
@@ -147,8 +148,9 @@ def base_cfg(
     cfg = {
         'experiment': experiment,
         'trial': trial,
-        'device': 'cuda',
-        'use_compile': False,
+        'compute_device': 'cuda',
+        'data_device': 'cuda',
+        'use_compile': True,
         'seed': -1,
         'local': True,
         'profile': False,

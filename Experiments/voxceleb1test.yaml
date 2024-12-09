@@ -1,0 +1,5 @@
+cfgs:
+  - dataset: voxceleb1
+    experiment: test
+    trial: no_interact
+    model_type: GPA

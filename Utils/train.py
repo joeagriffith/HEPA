@@ -6,6 +6,7 @@ from Utils.functional import cosine_schedule
 from Utils.evals import one_step_linear_probing, eval_representations, get_rep_metrics
 from Utils.functional import quaternion_delta, axis_angle
 from Utils.utils import get_ss_datasets
+import time
 
 def train(
         model,
@@ -15,8 +16,15 @@ def train(
         writer,
         cfg:dict,
 ):
+    print('Initialising training...')
 
-    device = cfg['device'] + ':' + str(cfg['ddp_rank'])
+    device = cfg['compute_device'] + ':' + str(cfg['ddp_rank'])
+    if cfg['use_compile']:
+        loss_fn = torch.compile(model.loss)
+        enc_fn = torch.compile(model)
+    else:
+        loss_fn = model.loss
+        enc_fn = model
 
 #============================== Online Model Learning Parameters ==============================
     # LR schedule, warmup then cosine
@@ -50,9 +58,9 @@ def train(
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=cfg['batch_size'], shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=cfg['batch_size'], shuffle=False)
 
-    ss_train_dataset, ss_val_dataset = get_ss_datasets(cfg)
+    ss_train_dataset, ss_val_dataset = get_ss_datasets(cfg, train_dataset, val_dataset)
     ss_train_loader = DataLoader(ss_train_dataset, batch_size=cfg['batch_size'], shuffle=True)
-    ss_val_loader = DataLoader(ss_val_dataset, batch_size=1000, shuffle=False)
+    ss_val_loader = DataLoader(ss_val_dataset, batch_size=cfg['batch_size'], shuffle=False)
 
 # ============================== Training Stuff ==============================
 
@@ -64,12 +72,14 @@ def train(
     postfix = {}
 
 # ============================== Training Loop ==============================
+    print('Starting training loop...')
     for epoch in range(cfg['num_epochs']):
         model.train()
         if cfg['has_teacher']:
             teacher.train()
 
-        train_dataset.apply_transform(batch_size=cfg['batch_size'])
+        if train_dataset.transform is not None:
+            train_dataset.apply_transform(batch_size=cfg['batch_size'])
 
         # Update lr and wd
         for param_group in optimiser.param_groups:
@@ -88,10 +98,9 @@ def train(
         else:
             loop = enumerate(train_loader)
         for i, data in loop:
-
             images2 = None
             actions = None
-            if cfg['dataset'] == 'mnist':
+            if cfg['dataset'] == 'mnist' or cfg['dataset'] == 'voxceleb1':
                 images1, _ = data
             elif cfg['dataset'] == 'modelnet10':
                 (images1, rot1, _), (images2, rot2, _) = data
@@ -113,7 +122,7 @@ def train(
                 if actions is not None:
                     actions = actions.to(device)
 
-            loss = model.loss(
+            loss = loss_fn(
                 img1=images1, 
                 img2=images2, 
                 actions=actions, 
@@ -146,7 +155,7 @@ def train(
             for i, data in enumerate(val_loader):
                 images2 = None
                 actions = None
-                if cfg['dataset'] == 'mnist':
+                if cfg['dataset'] == 'mnist' or cfg['dataset'] == 'voxceleb1':
                     images1, _ = data
                 elif cfg['dataset'] == 'modelnet10':
                     (images1, rot1, _), (images2, rot2, _) = data
@@ -166,7 +175,7 @@ def train(
                     if actions is not None:
                         actions = actions.to(device)
 
-                loss = model.loss(
+                loss = loss_fn(
                     img1=images1, 
                     img2=images2, 
                     actions=actions, 
@@ -184,7 +193,7 @@ def train(
         
         if cfg['master_process']:
             # single step linear classification eval
-            ss_val_acc, ss_val_loss = one_step_linear_probing(model, ss_train_loader, ss_val_loader)
+            ss_val_acc, ss_val_loss = one_step_linear_probing(enc_fn, model.num_features, ss_train_loader, ss_val_loader, device, cfg['bn_output'])
 
             # evaluate representations
             if writer is not None:
@@ -215,9 +224,12 @@ def train(
         if cfg['stop_learning_at'] is not None and (epoch+1) >= cfg['stop_learning_at']:
             break
 
+
+    print('evaluating representations...')
     if cfg['master_process']:
         if writer is not None:
             rep_metrics = eval_representations(model, cfg)
-            writer.add_scalar('test/feature_corr', rep_metrics['corr'], epoch)
-            writer.add_scalar('test/feature_std', rep_metrics['std'], epoch)
-            writer.add_scalar('test/feature_entropy', rep_metrics['entropy'], epoch)
+            if rep_metrics is not None:
+                writer.add_scalar('test/feature_corr', rep_metrics['corr'], epoch)
+                writer.add_scalar('test/feature_std', rep_metrics['std'], epoch)
+                writer.add_scalar('test/feature_entropy', rep_metrics['entropy'], epoch)

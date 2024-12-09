@@ -1,6 +1,7 @@
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import os
+import time
 
 from Methods import GPA, BYOL, JEPA, iJEPA, AE, VAE, MAE, Supervised
 
@@ -20,13 +21,13 @@ def get_model(cfg:dict):
             resolution=cfg['resolution'],
             p=cfg['p'],
             consider_actions=cfg['consider_actions']
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
 
     elif cfg['model_type'] == 'BYOL':
         return BYOL(
             in_features=cfg['in_features'],
             resolution=cfg['resolution'],
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
     
     elif cfg['model_type'] == 'JEPA':
         return JEPA(
@@ -35,7 +36,7 @@ def get_model(cfg:dict):
             resolution=cfg['resolution'],
             p=cfg['p'],
             consider_actions=cfg['consider_actions']
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
 
     elif cfg['model_type'] == 'iJEPA':
         return iJEPA(
@@ -43,32 +44,32 @@ def get_model(cfg:dict):
             input_size=(cfg['resolution'], cfg['resolution']),
             patch_size=cfg['patch_size'],
             min_keep=cfg['min_keep'],
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
 
     elif cfg['model_type'] == 'AE':
         return AE(
             in_features=cfg['in_features'],
             resolution=cfg['resolution'],
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
 
     elif cfg['model_type'] == 'VAE':
         return VAE(
             in_features=cfg['in_features'],
             z_dim=cfg['z_dim'],
             resolution=cfg['resolution'],
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
 
     elif cfg['model_type'] == 'MAE':
         return MAE(
             in_features=cfg['in_features'],
             resolution=cfg['resolution'],
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
     
     elif cfg['model_type'] == 'Supervised':
         return Supervised(
             in_features=cfg['in_features'],
             resolution=cfg['resolution'],
-        ).to(cfg['device'])
+        ).to(cfg['compute_device'])
 
     else:
         raise ValueError(f"Model type '{cfg['model_type']}' is not supported.")
@@ -107,35 +108,36 @@ def get_datasets(cfg):
         n_train = len(dataset) - n_val
         train_set, val_set = torch.utils.data.random_split(dataset, [n_train, n_val])
 
-        device = torch.device(cfg['device'])
+        device = torch.device(cfg['data_device'])
         train_set = PreloadedDataset.from_dataset(train_set, None, device, use_tqdm=cfg['local'])
         val_set = PreloadedDataset.from_dataset(val_set, None, device, use_tqdm=cfg['local'])
 
     elif cfg['dataset'] == 'modelnet10':
-        train_set = ModelNet10(cfg['root'], 'train', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        train_set = ModelNet10(cfg['root'], 'train', device=cfg['data_device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
         train_set, val_set = train_set.split_set(cfg['train_ratio'])
     
     elif cfg['dataset'] == 'voxceleb1':
-        train_set = VoxCeleb1(cfg['root'], 'train', device=cfg['device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        train_set = VoxCeleb1(cfg['root'], 'train', device=cfg['data_device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
         train_set, val_set = train_set.split_set(cfg['train_ratio'])
 
     return train_set, val_set
     
-def get_ss_datasets(cfg):
+def get_ss_datasets(cfg, train_dataset=None, val_dataset=None, subset_ratio=1.0):
     if cfg['dataset'] == 'mnist':
-        ss_train_dataset = MNIST(cfg['root'], split='train', n=1, transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
-        ss_val_dataset = MNIST(cfg['root'], split='val', transform=transforms.ToTensor(), device=cfg['device'], use_tqdm=cfg['local'])
+        ss_train_dataset = MNIST(cfg['root'], split='train', n=1, transform=transforms.ToTensor(), device=cfg['data_device'], use_tqdm=cfg['local'])
+        ss_val_dataset = MNIST(cfg['root'], split='val', transform=transforms.ToTensor(), device=cfg['data_device'], use_tqdm=cfg['local'])
     elif cfg['dataset'] == 'modelnet10':
-        ss_train_dataset = ModelNet10Simple(cfg['root'], 'train', n=10, transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
-        ss_val_dataset = ModelNet10Simple(cfg['root'], 'val', n=10, transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        ss_train_dataset = ModelNet10Simple(cfg['root'], 'train', n=10, transform=None, device=cfg['data_device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        ss_val_dataset = ModelNet10Simple(cfg['root'], 'val', n=10, transform=None, device=cfg['data_device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
     elif cfg['dataset'] == 'voxceleb1':
-        ss_train_dataset = VoxCeleb1TripletDataset(cfg['root'], 'train', transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
-        ss_val_dataset = VoxCeleb1TripletDataset(cfg['root'], 'val', transform=None, device=cfg['device'], use_tqdm=cfg['local'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        ss_train_dataset = VoxCeleb1TripletDataset(train_dataset, subset_ratio=subset_ratio)
+        ss_val_dataset = VoxCeleb1TripletDataset(val_dataset, subset_ratio=subset_ratio)
+        # ss_train_dataset = VoxCeleb1Triplet(cfg['root'], 'train', device=cfg['data_device'], use_tqdm=cfg['local'], resolution=cfg['resolution'], dataset_dtype=cfg['dataset_dtype'], rank=cfg['ddp_rank'], world_size=cfg['ddp_world_size'], seed=cfg['seed'])
+        # ss_train_dataset, ss_val_dataset = ss_train_dataset.split_set(cfg['train_ratio'])
     else:
         raise ValueError(f'Dataset {cfg["dataset"]} not implemented')
     
     return ss_train_dataset, ss_val_dataset
-
 
 def get_writer(cfg, n=None):
     if n is None:
