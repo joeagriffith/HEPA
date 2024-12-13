@@ -6,17 +6,12 @@ from Utils.nn.nets import Encoder28, Decoder28, Decoder128, Decoder224
 from Utils.nn.resnet_encoder import resnet18
 
 
-def vae_loss(recon_x, x, mu, logVar, beta=1.0):
-    reconstruction_loss = F.binary_cross_entropy_with_logits(recon_x, x, reduction='sum')
-    mse = F.mse_loss(F.sigmoid(recon_x), x) * x.shape[0]
-    kl_loss = -0.5 * torch.sum(1 + logVar - mu.pow(2) - logVar.exp())
-    return reconstruction_loss + beta * kl_loss, mse
-
 class VAE(nn.Module):
     def __init__(self, in_features, z_dim, resolution=28):
         super().__init__()
         self.in_features = in_features
         self.num_features = z_dim
+        self.beta = 1.0
 
         if resolution == 28:
             self.h_dim = 256
@@ -59,8 +54,9 @@ class VAE(nn.Module):
         return x_hat, mu, logVar
 
     def loss(self, img1, **_):
-
         with torch.autocast(device_type=img1.device.type, dtype=torch.bfloat16):
             x_hat, mu, logVar = self.reconstruct(img1)
-            loss = vae_loss(x_hat, img1, mu, logVar)[0]
+            recon_loss = F.binary_cross_entropy_with_logits(x_hat, img1, reduction='sum') / img1.shape[0]
+            kl_loss = -0.5 * torch.sum(1 + logVar - mu.pow(2) - logVar.exp()) / mu.shape[0]
+            loss = recon_loss + self.beta * kl_loss
         return loss

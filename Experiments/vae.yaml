@@ -1,0 +1,26 @@
+cfgs:
+  - dataset: mnist
+    experiment: GPA
+    trial: GPA_new
+    model_type: GPA
+    save: False
+  - dataset: mnist
+    experiment: GPA
+    trial: GPA_new
+    model_type: GPA
+    save: False
+  - dataset: mnist
+    experiment: GPA
+    trial: GPA_new
+    model_type: GPA
+    save: False
+  - dataset: mnist
+    experiment: GPA
+    trial: GPA_new
+    model_type: GPA
+    save: False
+  - dataset: mnist
+    experiment: GPA
+    trial: GPA_new
+    model_type: GPA
+    save: False

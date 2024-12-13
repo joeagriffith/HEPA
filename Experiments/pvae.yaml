@@ -1,0 +1,26 @@
+cfgs:
+  - dataset: mnist
+    experiment: PVAE
+    trial: PVAE
+    model_type: PVAE
+    save: True
+
+  - dataset: mnist
+    experiment: PVAE
+    trial: PVAE
+    model_type: PVAE
+
+  - dataset: mnist
+    experiment: PVAE
+    trial: PVAE
+    model_type: PVAE
+
+  - dataset: mnist
+    experiment: PVAE
+    trial: PVAE
+    model_type: PVAE
+
+  - dataset: mnist
+    experiment: PVAE
+    trial: PVAE
+    model_type: PVAE

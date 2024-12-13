@@ -5,3 +5,4 @@ from Methods.ae import AE
 from Methods.mae import MAE
 from Methods.vae import VAE
 from Methods.iJEPA import iJEPA
+from Methods.PVAE import PVAE

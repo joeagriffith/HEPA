@@ -64,16 +64,35 @@ class GPA(nn.Module):
         )
 
     # For acting on MNIST images
-    def transform_images(self, images):
-        act_p = torch.rand(5) # whether to apply each augmentation
-        angle = torch.rand(1).item() * 360 - 180 if act_p[0] < self.p else 0
-        translate_x = torch.randint(-8, 9, (1,)).item() if act_p[1] < self.p else 0
-        translate_y = torch.randint(-8, 9, (1,)).item() if act_p[2] < self.p else 0
-        scale = torch.rand(1).item() * 0.5 + 0.75 if act_p[3] < self.p else 1.0
-        shear = torch.rand(1).item() * 50 - 25 if act_p[4] < self.p else 0
-        images_aug = F_v2.affine(images, angle=angle, translate=(translate_x, translate_y), scale=scale, shear=shear)
-        actions = torch.tensor([angle/180, translate_x/8, translate_y/8, (scale-1.0)/0.25, shear/25], dtype=torch.float32, device=images.device).unsqueeze(0).repeat(images.shape[0], 1)
+    # def transform_images(self, images):
+    #     # Sample action
+    #     action = torch.rand(5, dtype=images.dtype, device=images.device) * 2 - 1
+    #     mask = torch.rand(5, dtype=images.dtype, device=images.device) < self.p
+    #     action = action * mask
 
+    #     # Calculate affine parameters
+    #     angle = action[0].item() * 180
+    #     translate_x, translate_y = action[1].item() * 8, action[2].item() * 8
+    #     scale = action[3].item() * 0.25 + 1.0
+    #     shear = action[4].item() * 25
+
+    #     # Apply affine transformation
+    #     images_aug = F_v2.affine(images, angle=angle, translate=(translate_x, translate_y), scale=scale, shear=shear)
+    #     actions = action.unsqueeze(0).repeat(images.shape[0], 1)
+    #     return images_aug, actions
+    def transform_images(self, images):
+        # Sample action
+        action = torch.randn(5, dtype=images.dtype, device=images.device) * 0.4
+
+        # Calculate affine parameters
+        angle = action[0].item() * 180
+        translate_x, translate_y = action[1].item() * 8, action[2].item() * 8
+        scale = max(action[3].item() * 0.25 + 1.0, 0.1)
+        shear = action[4].item() * 25
+
+        # Apply affine transformation
+        images_aug = F_v2.affine(images, angle=angle, translate=(translate_x, translate_y), scale=scale, shear=shear)
+        actions = action.unsqueeze(0).repeat(images.shape[0], 1)
         return images_aug, actions
 
     # For acting on VoxCeleb1 spectrograms
@@ -124,52 +143,59 @@ class GPA(nn.Module):
         actions = torch.tensor([(width_factor-1.0)/0.25, (height_factor-1.0)/0.25, shift_x/8, shift_y/8], dtype=torch.bfloat16, device=images.device).unsqueeze(0).repeat(images.shape[0], 1)
         return images_aug, actions
     
-    # Fake interact that does nothing
-    def interact(self, images, groups=8):
-        return images, torch.zeros(images.shape[0], 4, device=images.device)
-
+    # # Fake interact that does nothing
     # def interact(self, images, groups=8):
-    #     """
-    #     Interact with the images by applying either image or spectrogram transformations.
+    #     return images, torch.zeros(images.shape[0], 4, device=images.device)
+
+    def interact(self, images, groups=8):
+        """
+        Interact with the images by applying either image or spectrogram transformations.
         
-    #     Parameters:
-    #     images (torch.Tensor): The input image tensor.
-    #     groups (int): The number of groups to split the images into.
+        Parameters:
+        images (torch.Tensor): The input image tensor.
+        groups (int): The number of groups to split the images into.
         
-    #     Returns:
-    #     torch.Tensor: The augmented images tensor.
-    #     torch.Tensor: The actions tensor.
+        Returns:
+        torch.Tensor: The augmented images tensor.
+        torch.Tensor: The actions tensor.
 
-    #     """
-    #     N, _, original_height, original_width = images.size()
-    #     if N < groups:
-    #         groups = N
-    #     n_per = N // groups
+        """
+        N, _, original_height, original_width = images.size()
+        if N < groups:
+            groups = N
+        n_per = N // groups
 
-    #     images_aug_arr = []
-    #     actions_arr = []
+        images_aug_arr = []
+        actions_arr = []
 
-    #     lo, hi = 0, n_per + N % groups
-    #     while lo < N:
-    #         if original_width <= 32:
-    #             images_aug, actions = self.transform_images(images[lo:hi])
-    #         else:
-    #             images_aug, actions = self.transform_spectrogram(images[lo:hi])
+        lo, hi = 0, n_per + N % groups
+        while lo < N:
+            if original_width <= 32:
+                images_aug, actions = self.transform_images(images[lo:hi])
+            else:
+                images_aug, actions = self.transform_spectrogram(images[lo:hi])
             
-    #         images_aug_arr.append(images_aug)
-    #         actions_arr.append(actions)
+            images_aug_arr.append(images_aug)
+            actions_arr.append(actions)
 
-    #         lo = hi
-    #         hi = min(N, lo + n_per)
+            lo = hi
+            hi = min(N, lo + n_per)
         
-    #     return torch.cat(images_aug_arr, dim=0), torch.cat(actions_arr, dim=0)
+        return torch.cat(images_aug_arr, dim=0), torch.cat(actions_arr, dim=0)
 
+    # def forward(self, x, stop_at=-1):
+    #     # return self.encoder(x, stop_at)
+    #     if stop_at != -1:
+    #         # return self.encoder(x, stop_at)
+    #         raise(f'Changed this, make sure works?')
+    #     return self.encoder(x)
     def forward(self, x, stop_at=-1):
-        # return self.encoder(x, stop_at)
-        if stop_at != -1:
-            # return self.encoder(x, stop_at)
-            raise(f'Changed this, make sure works?')
-        return self.encoder(x)
+        # return self.encoder(x)
+        z_x = self.encoder(x)
+        a = torch.zeros(x.shape[0], self.num_actions, device=x.device)
+        z_a = self.action_encoder(a)
+        z_pred = self.transition(torch.cat([z_x, z_a], dim=1))
+        return z_pred
     
     def predict(self, x, a=None):
         if a is None:

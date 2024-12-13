@@ -222,6 +222,18 @@ def base_cfg(
         cfg['p'] = 0.25
         cfg['save_metric'] = 'val_loss'
     
+    elif cfg['model_type'] == 'PVAE':
+        enforce_cfg['has_teacher'] = True
+
+        # PVAE specific optionals
+        cfg['num_actions'] = num_actions
+        cfg['stop_at'] = 0
+        cfg['start_tau'] = 0.996
+        cfg['end_tau'] = 1.0
+        cfg['consider_actions'] = True
+        cfg['p'] = 0.25
+        cfg['save_metric'] = 'val_loss'
+
     elif cfg['model_type'] == 'BYOL':
         enforce_cfg['has_teacher'] = True
 

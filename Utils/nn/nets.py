@@ -18,8 +18,16 @@ class Encoder28(nn.Module):
             EncBlock(32, 64, 3, 1, 1, pool=True),
             EncBlock(64, 128, 3, 1, 0),
             EncBlock(128, 256, 3, 1, 0),
-            EncBlock(256, num_features, 3, 1, 0, bn=False),
+            EncBlock(256, 512, 3, 1, 0),
         ])
+        self.mlp = nn.Sequential(
+            nn.Linear(512, 512),
+            nn.SiLU(),
+            nn.Linear(512, 512),
+            nn.SiLU(),
+            nn.Linear(512, num_features),
+            nn.LayerNorm(num_features),
+        )
     
     def forward(self, x, stop_at=-1):
 
@@ -30,6 +38,9 @@ class Encoder28(nn.Module):
         
         if x.shape[2] == 1:
             x = x.flatten(1)
+        
+        if stop_at == -1:
+            x = self.mlp(x)
         return x
 
 class Decoder1(nn.Module):

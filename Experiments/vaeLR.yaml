@@ -1,0 +1,13 @@
+cfgs:
+  - dataset: mnist
+    experiment: VAELR
+    trial: 1e-4lr
+    model_type: VAE
+    start_lr: 0.0001
+    end_lr: 0.00001
+  - dataset: mnist
+    experiment: VAELR
+    trial: 3e-4lr
+    model_type: VAE
+    start_lr: 0.0003
+    end_lr: 0.00001

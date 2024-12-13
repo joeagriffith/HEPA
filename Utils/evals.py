@@ -14,6 +14,8 @@ from Examples.VoxCeleb1.dataset import VoxCeleb1, VoxCeleb1Triplet
 from Utils.utils import get_ss_datasets
 from Utils.functional import feature_correlation, feature_std, feature_entropy
 
+from copy import deepcopy
+
 def linear_probing(
     model: nn.Module,
     writer: SummaryWriter,
@@ -43,10 +45,10 @@ def linear_probing(
             nn.BatchNorm1d(model.num_features, affine=False) if cfg['bn_output'] else nn.Identity(),
             nn.Linear(model.num_features, 10, bias=False),
         ).to(device)
-    # batch_size = max(n_per_class, 10)
-    batch_size = 64
+    batch_size = max(n_per_class, 5)
+    # batch_size = 64
     num_epochs = 100 if cfg['dataset'] == 'mnist' else 200
-    lr = 0.1
+    lr = 0.01
 
     if cfg['dataset'] == 'mnist':
         train = MNIST(cfg['root'], split='train', n=n_per_class, device=cfg['data_device'], use_tqdm=cfg['local'])
@@ -64,7 +66,7 @@ def linear_probing(
         raise ValueError(f'Dataset {cfg["dataset"]} not supported')
 
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val, batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(val, batch_size=256, shuffle=False)
 
     param_dict = {pn: p for pn, p in classifier.named_parameters()}
     param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
@@ -77,14 +79,13 @@ def linear_probing(
     ]
 
     optimiser = torch.optim.AdamW(optim_groups, lr=lr)
-    sched_step_size = 30 if cfg['dataset'] == 'mnist' else 60
-    scheduler = torch.optim.lr_scheduler.StepLR(optimiser, step_size=sched_step_size, gamma=0.1) 
 
     last_train_loss = torch.tensor(-1, device=device)
     last_train_acc = torch.tensor(-1, device=device)
     last_val_loss = torch.tensor(-1, device=device)
     last_val_acc = torch.tensor(-1, device=device)
-    best_val_acc = torch.tensor(-1, device=device)
+    best_val_loss = torch.tensor(1e10, device=device)
+    best_sd = deepcopy(classifier.state_dict())
 
     postfix = {}
     for epoch in range(num_epochs):
@@ -100,7 +101,7 @@ def linear_probing(
         epoch_train_loss = torch.zeros(len(train_loader), device=device)
         epoch_train_acc = torch.zeros(len(train_loader), device=device)
         for i, (x, y) in loop:
-            if type(x) == torch.tensor:
+            if type(x) == torch.Tensor:
                 x = x.to(device)
                 y = y.to(device)
                 with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -125,6 +126,8 @@ def linear_probing(
                 y_pred = torch.cat([(pos_y_pred.sigmoid() > 0.5).float(), (neg_y_pred.sigmoid() > 0.5).float()])
                 y = torch.cat((pos_y, neg_y))
                 epoch_train_acc[i] = (y_pred == y).float().mean()
+            else:
+                raise ValueError(f'Invalid data type: {type(x)}')
                 
             classifier.zero_grad(set_to_none=True)
             loss.backward()
@@ -135,15 +138,13 @@ def linear_probing(
         last_train_loss = epoch_train_loss.mean()
         last_train_acc = epoch_train_acc.mean()
 
-        scheduler.step()
-        
         with torch.no_grad():
             classifier.eval()
 
             epoch_val_loss = torch.zeros(len(val_loader), device=device)
             epoch_val_acc = torch.zeros(len(val_loader), device=device)
             for i, (x, y) in enumerate(val_loader):
-                if type(x) == torch.tensor:
+                if type(x) == torch.Tensor:
                     x = x.to(device)
                     y = y.to(device)
                     with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -167,12 +168,14 @@ def linear_probing(
                     y_pred = torch.cat([(pos_y_pred.sigmoid() > 0.5).float(), (neg_y_pred.sigmoid() > 0.5).float()])
                     y = torch.cat((pos_y, neg_y))
                     epoch_val_acc[i] = (y_pred == y).float().mean().detach()
-                epoch_val_loss[i] += loss.detach()
+                epoch_val_loss[i] = loss.detach()
+
 
             last_val_loss = epoch_val_loss.mean().detach() 
             last_val_acc = epoch_val_acc.mean().detach()
-            if last_val_acc > best_val_acc:
-                best_val_acc = last_val_acc
+            if last_val_loss < best_val_loss:
+                best_val_loss = last_val_loss
+                best_sd = deepcopy(classifier.state_dict())
         
         if writer is not None:
             writer.add_scalar('train/loss', last_train_loss.item(), epoch)
@@ -186,6 +189,8 @@ def linear_probing(
             'val_loss': last_val_loss.item(),
             'val_accuracy': last_val_acc.item(),
         }
+
+    classifier.load_state_dict(best_sd)
 
     if cfg['dataset'] == 'mnist':
         t_dataset = datasets.MNIST(root='../Datasets/', train=False, transform=transforms.ToTensor(), download=True)

@@ -3,7 +3,7 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 import time
 
-from Methods import GPA, BYOL, JEPA, iJEPA, AE, VAE, MAE, Supervised
+from Methods import *
 
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
@@ -15,6 +15,16 @@ from Utils.dataset import PreloadedDataset
 def get_model(cfg:dict):
     if cfg['model_type'] == 'GPA':
         return GPA(
+            in_features=cfg['in_features'],
+            num_actions=cfg['num_actions'],
+            stop_at=cfg['stop_at'],
+            resolution=cfg['resolution'],
+            p=cfg['p'],
+            consider_actions=cfg['consider_actions']
+        ).to(cfg['compute_device'])
+
+    elif cfg['model_type'] == 'PVAE':
+        return PVAE(
             in_features=cfg['in_features'],
             num_actions=cfg['num_actions'],
             stop_at=cfg['stop_at'],

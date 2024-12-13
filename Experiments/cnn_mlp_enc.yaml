@@ -1,0 +1,29 @@
+cfgs:
+  - dataset: mnist
+    experiment: z10
+    trial: new_aug_0.4
+    model_type: GPA
+  - dataset: mnist
+    experiment: z10
+    trial: new_aug_0.4
+    model_type: GPA
+  - dataset: mnist
+    experiment: z10
+    trial: ae
+    model_type: AE
+  - dataset: mnist
+    experiment: z10
+    trial: ae
+    model_type: AE
+  - dataset: mnist
+    experiment: z10
+    trial: ae
+    model_type: AE
+  - dataset: mnist
+    experiment: z10
+    trial: ae
+    model_type: AE
+  - dataset: mnist
+    experiment: z10
+    trial: ae
+    model_type: AE
